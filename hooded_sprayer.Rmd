@@ -99,16 +99,17 @@ data <- missouri %>%
   bind_rows(nebraska) %>% 
   bind_rows(wisconsin) %>% 
   janitor::clean_names() %>% 
-  rename(deposition = n_l_cm2)
+  rename(deposition = n_l_cm2) %>% 
+  mutate_if(is_character, as_factor)
 ```
 
 
 ```{r}
 data %>% 
-  filter(type == "downwind" & location == "wisconsin") %>% 
-  ggplot(aes(x = distance_m, y = deposition,
-             color = nozzle)) +
-  geom_point() +
-  facet_grid(sprayer ~ solution)
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = "_") %>% 
+  filter(type == "downwind")
 ```
+
+
+
 
