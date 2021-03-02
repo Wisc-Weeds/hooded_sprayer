@@ -94,6 +94,7 @@ wisconsin <- downwind_wi %>%
 ```
 
 
+
 ```{r}
 data <- missouri %>% 
   bind_rows(nebraska) %>% 
@@ -103,10 +104,15 @@ data <- missouri %>%
   mutate_if(is_character, as_factor)
 ```
 
-
 ```{r}
 data %>% 
-  unite("trt", c("solution", "sprayer", "nozzle"), sep = "_") %>% 
+  distinct(location, date)
+```
+
+
+```{r}
+data1 <- data %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = "_", remove = FALSE) %>% 
   filter(type == "downwind")
 ```
 
