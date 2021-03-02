@@ -32,7 +32,8 @@ upwind_mo <- missouri$upwind_mo %>%
          type = "upwind")
 inswath_mo <- missouri$inswath_mo %>%
   mutate('distance (m)' = NA,
-         type = "inswath")
+         type = "inswath") %>% 
+  dplyr::select(-...8)
 
 missouri <- downwind_mo %>% 
   bind_rows(upwind_mo) %>% 
@@ -99,5 +100,15 @@ data <- missouri %>%
   bind_rows(wisconsin) %>% 
   janitor::clean_names() %>% 
   rename(deposition = n_l_cm2)
+```
+
+
+```{r}
+data %>% 
+  filter(type == "downwind" & location == "wisconsin") %>% 
+  ggplot(aes(x = distance_m, y = deposition,
+             color = nozzle)) +
+  geom_point() +
+  facet_grid(sprayer ~ solution)
 ```
 
