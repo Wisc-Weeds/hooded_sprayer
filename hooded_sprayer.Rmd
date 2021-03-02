@@ -1,0 +1,103 @@
+---
+title: "hooded_sprayer"
+author: "Maxwel Coura Oliveira"
+date: "3/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message = FALSE}
+library(tidyverse)
+```
+
+
+
+```{r missouri-data}
+path_mo <- "./data/deposition/Deposition data_MO.xlsx"
+
+missouri <- path_mo %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_mo", "upwind_mo", "inswath_mo")) %>% 
+  map(readxl::read_excel, path = path_mo)
+
+
+
+downwind_mo <- missouri$downwind_mo %>% 
+  mutate(type = "downwind")
+upwind_mo <- missouri$upwind_mo %>% 
+  mutate('distance (m)' = NA,
+         type = "upwind")
+inswath_mo <- missouri$inswath_mo %>%
+  mutate('distance (m)' = NA,
+         type = "inswath")
+
+missouri <- downwind_mo %>% 
+  bind_rows(upwind_mo) %>% 
+  bind_rows(inswath_mo) %>% 
+  mutate(location = "missouri")
+```
+
+
+```{r nebraska-data}
+path_ne <- "./data/deposition/Deposition data_NE.xlsx"
+
+nebraska <- path_ne %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_ne", "upwind_ne", "inswath_ne")) %>% 
+  map(readxl::read_excel, path = path_ne)
+
+
+
+downwind_ne <- nebraska$downwind_ne %>% 
+  mutate(type = "downwind")
+upwind_ne <- nebraska$upwind_ne %>% 
+  mutate('distance (m)' = NA,
+         type = "upwind")
+inswath_ne <- nebraska$inswath_ne %>%
+  mutate('distance (m)' = NA,
+         type = "inswath")
+
+nebraska <- downwind_ne %>% 
+  bind_rows(upwind_ne) %>% 
+  bind_rows(inswath_ne) %>% 
+  mutate(location = "nebraska")
+```
+
+
+```{r wisconsin-data}
+path_wi <- "./data/deposition/Deposition data_WI.xlsx"
+
+wisconsin <- path_wi %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_wi", "upwind_wi", "inswath_wi")) %>% 
+  map(readxl::read_excel, path = path_wi)
+
+
+
+downwind_wi <- wisconsin$downwind_wi %>% 
+  mutate(type = "downwind")
+upwind_wi <- wisconsin$upwind_wi %>% 
+  mutate('distance (m)' = NA,
+         type = "upwind")
+inswath_wi <- wisconsin$inswath_wi %>%
+  mutate('distance (m)' = NA,
+         type = "inswath")
+
+wisconsin <- downwind_wi %>% 
+  bind_rows(upwind_wi) %>% 
+  bind_rows(inswath_wi) %>% 
+  mutate(location = "wisconsin")
+```
+
+
+```{r}
+data <- missouri %>% 
+  bind_rows(nebraska) %>% 
+  bind_rows(wisconsin) %>% 
+  janitor::clean_names() %>% 
+  rename(deposition = n_l_cm2)
+```
+
