@@ -9,10 +9,14 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
 ```{r message = FALSE}
 library(tidyverse)
+library(drc)
+library(tidymodels)
+library(lmerTest)
+#options(scipen = 999)
 ```
-
 
 
 ```{r missouri-data}
@@ -94,7 +98,6 @@ wisconsin <- downwind_wi %>%
 ```
 
 
-
 ```{r}
 data <- missouri %>% 
   bind_rows(nebraska) %>% 
@@ -104,16 +107,58 @@ data <- missouri %>%
   mutate_if(is_character, as_factor)
 ```
 
+
 ```{r}
 data %>% 
-  distinct(location, date)
+  filter(location == "wisconsin") %>% 
+  distinct(date, solution, sprayer, nozzle, type, pass)
+```
+
+```{r}
+data1 %>% 
+  filter(type == "downwind") %>% 
+  ggplot(aes(x = distance_m, y = deposition, color = trt)) +
+  geom_jitter(alpha = 0.1) +
+  facet_grid(~ location)
 ```
 
 
 ```{r}
 data1 <- data %>% 
-  unite("trt", c("solution", "sprayer", "nozzle"), sep = "_", remove = FALSE) %>% 
-  filter(type == "downwind")
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = "_", remove = FALSE)
+```
+
+
+```{r}
+data2 <- data1 %>% 
+  filter(type == "downwind") %>% 
+  group_by(location) %>% 
+  nest()
+```
+
+
+```{r drc-full}
+drc_model <- function(df) {
+  drm(deposition ~ distance_m, trt, fct = l3(), data = df)
+}
+```
+
+
+```{r message=FALSE, warning=FALSE}
+data3 <- data2 %>% 
+  mutate(model = map(data, drc_model),
+         summary = map(model, tidy))
+```
+
+```{r}
+data3 %>% 
+  unnest(summary)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+data3 %>% 
+  unnest(summary)
 ```
 
 
