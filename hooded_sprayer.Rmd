@@ -15,9 +15,10 @@ library(tidyverse)
 library(drc)
 library(tidymodels)
 library(lmerTest)
-#options(scipen = 999)
+options(scipen = 999)
 ```
 
+# Deposition --------------------------------------------------------------------------------
 
 ```{r missouri-data}
 path_mo <- "./data/deposition/Deposition data_MO.xlsx"
@@ -104,19 +105,67 @@ data <- missouri %>%
   bind_rows(wisconsin) %>% 
   janitor::clean_names() %>% 
   rename(deposition = n_l_cm2) %>% 
-  mutate_if(is_character, as_factor)
+  mutate_if(is_character, as_factor) %>% 
+  mutate(distance_m2 = distance_m - 1)
 ```
+
+
+# Weather --------------------------------------------------------------------------------
+
+```{r}
+path_mo <- "./data/weather/Weather data_MO.xlsx"
+
+missouri <- path_mo %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_mo", "upwind_mo", "inswath_mo")) %>% 
+  map(readxl::read_excel, path = path_mo)
+
+library(purrr)
+file.list <- list.files(path="data/weather", pattern='*.xlsx')
+file.list <- setNames(file.list, file.list) # only needed when you need an id-column with the file-names
+
+df <- map_df(file.list, readxl::read_excel, .id = "id")
+```
+
+```{r message=FALSE}
+data_path <- "./data/weather"   
+files <- dir(data_path, pattern = '*.xlsx') 
+
+weather_data <- files %>%
+  map(~ readxl::read_excel(file.path(data_path, .)))
+```
+
+
+```{r message=FALSE, warning=FALSE}
+weather_mo <- weather_data[[1]] %>% 
+  janitor::row_to_names(row_number = 1)
+
+
+weather_ne <- weather_data[[2]] %>% 
+  janitor::row_to_names(row_number = 1)
+
+
+weather_wi <- weather_data[[3]] %>% 
+  janitor::row_to_names(row_number = 1)
+
+weather <- weather_mo %>% 
+  bind_rows(weather_ne) %>% 
+  bind_rows(weather_wi) %>% 
+  janitor::clean_names() %>% 
+  mutate_at(vars(pass:wd_analysis), funs(round(3))) %>% 
+  mutate(date = lubridate::mdy_hms(date))
+```
+
 
 
 ```{r}
 data %>% 
-  filter(location == "wisconsin") %>% 
-  distinct(date, solution, sprayer, nozzle, type, pass)
+  distinct(pass, block, date, solution, sprayer, nozzle, type, pass, location)
 ```
 
 ```{r}
 data1 %>% 
-  filter(type == "downwind") %>% 
+  filter(type == "downwind") %>%
   ggplot(aes(x = distance_m, y = deposition, color = trt)) +
   geom_jitter(alpha = 0.1) +
   facet_grid(~ location)
@@ -125,14 +174,14 @@ data1 %>%
 
 ```{r}
 data1 <- data %>% 
-  unite("trt", c("solution", "sprayer", "nozzle"), sep = "_", remove = FALSE)
+  unite("trt", c("sprayer", "nozzle"), sep = "_", remove = FALSE)
 ```
 
 
 ```{r}
 data2 <- data1 %>% 
   filter(type == "downwind") %>% 
-  group_by(location) %>% 
+  group_by(location, solution) %>% 
   nest()
 ```
 
@@ -149,6 +198,18 @@ data3 <- data2 %>%
   mutate(model = map(data, drc_model),
          summary = map(model, tidy))
 ```
+
+
+```{r}
+data3 %>% 
+  unnest(summary)
+```
+
+
+```{r}
+plot(data3$model[[4]], type = "all", log = "")
+```
+
 
 ```{r}
 data3 %>% 
