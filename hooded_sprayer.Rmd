@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r message = FALSE}
 library(tidyverse)
-library(drc)
+library(lme4)
 library(tidymodels)
 library(lmerTest)
 options(scipen = 999)
@@ -106,8 +106,13 @@ data <- missouri %>%
   janitor::clean_names() %>% 
   rename(deposition = n_l_cm2) %>% 
   mutate_if(is_character, as_factor) %>% 
-  mutate(distance_m2 = distance_m - 1)
+  mutate(distance_m = replace_na(distance_m, 0.000001)) %>% 
+  mutate(distance_log = log10(distance_m),
+         deposition_log = log10(deposition)) 
 ```
+
+
+
 
 
 # Weather --------------------------------------------------------------------------------
@@ -152,57 +157,99 @@ weather <- weather_mo %>%
   bind_rows(weather_ne) %>% 
   bind_rows(weather_wi) %>% 
   janitor::clean_names() %>% 
-  mutate_at(vars(pass:wd_analysis), funs(round(3))) %>% 
-  mutate(date = lubridate::mdy_hms(date))
+  mutate(date = lubridate::mdy_hms(date)) %>% 
+  mutate_at(vars(pass:wind_speed_average_19), funs(as.double),
+            vars(pass:wind_speed_average_19), funs(round(.,5))) %>% 
+  rename_at(vars(wind_direction_max_9:wind_speed_average_13), paste0, "_voltage") %>% 
+  rename_at(vars(wind_direction_min_14:wind_direction_average_16), paste0, "_degress") %>% 
+  rename_at(vars(wind_speed_min_17:wind_speed_average_19), paste0, "_mph")
 ```
 
+
+# Missouri
+
+```{r}
+data_mo <- data %>% 
+  filter(type != "upwind") %>% 
+  filter(location == "missouri") %>% 
+  drop_na()
+
+model_mo <- lmer(deposition_log ~ distance_log * sprayer * nozzle + 
+         (1|block), REML = FALSE, data = data_mo)
+
+summary(model_mo)
+```
+
+```{r}
+data_mo %>% 
+  ggplot(aes(x = distance_m, y = deposition, color = nozzle)) +
+  geom_line(data = bind_cols(data_mo, pred = predict(model_mo)), aes(y = pred), size = 1)  +
+  scale_x_log10() + 
+  scale_y_log10()
+
+```
 
 
 ```{r}
-data %>% 
-  distinct(pass, block, date, solution, sprayer, nozzle, type, pass, location)
+# Here you select the GDD you want. For instance, if you want to see the residual at the end season, you add GDD>1000
+new_points <- expand.grid(distance_log = c(0, 1.477121, 1.778151), 
+                          sprayer = c("Open", "Hood"),
+                          nozzle = c("TTI", "AIXR", "ULD"))
+new_points
 ```
 
+
 ```{r}
-data1 %>% 
-  filter(type == "downwind") %>%
-  ggplot(aes(x = distance_m, y = deposition, color = trt)) +
-  geom_jitter(alpha = 0.1) +
-  facet_grid(~ location)
+#Getting predited values
+mo_pred <- augment(model_mo, new_data = new_points)
+mo_pred %>% 
+  ggplot(aes(x=distance_log, y = .fitted, color = nozzle)) +
+  geom_smooth() +
+  geom_point() +
+  facet_grid(~ sprayer)
 ```
+
+
+```{r}
+#Getting conf intervals
+library(merTools)
+conf_int_mo <- predictInterval(model_mo, 
+                         newdata = new_points)
+conf_int_mo
+```
+
+
+
 
 
 ```{r}
 data1 <- data %>% 
-  unite("trt", c("sprayer", "nozzle"), sep = "_", remove = FALSE)
+  filter(type != "upwind") %>% 
+  group_by(location) %>% 
+  filter(location != "missouri") %>% 
+  nest()
+```
+
+
+
+
+```{r}
+linear_function <- function(df){
+  lmer(deposition_log ~ distance_log * solution * sprayer * nozzle + 
+         (1|block), REML = FALSE, data = df)
+}
 ```
 
 
 ```{r}
 data2 <- data1 %>% 
-  filter(type == "downwind") %>% 
-  group_by(location, solution) %>% 
-  nest()
-```
-
-
-```{r drc-full}
-drc_model <- function(df) {
-  drm(deposition ~ distance_m, trt, fct = l3(), data = df)
-}
-```
-
-
-```{r message=FALSE, warning=FALSE}
-data3 <- data2 %>% 
-  mutate(model = map(data, drc_model),
-         summary = map(model, tidy))
+  mutate(model = map(data, linear_function),
+         summary = map(model, summary))
 ```
 
 
 ```{r}
-data3 %>% 
-  unnest(summary)
+data2$model[[1]]
 ```
 
 
