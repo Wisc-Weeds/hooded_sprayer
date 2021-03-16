@@ -1,28 +1,49 @@
 ---
-title: "hooded_sprayer"
-author: "Maxwel Coura Oliveira"
-date: "3/2/2021"
-output: html_document
+title: "Hooded sprayer studies in Missouri, Nebraska and Wisconsin"
+author: "Maxwel Coura Oliveira, Guilherme Alves and Rodrigo Werle"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
+    toc: true
 ---
 
+
+
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = 'center')
 ```
 
+<center>
+```{r echo=FALSE}
+library(tweetrmd)
+tweet_embed("https://twitter.com/i/status/1306184791042256897")
+```
+</center>
+
+
+# Packages
 
 ```{r message = FALSE}
 library(tidyverse)
 library(lme4)
-library(tidymodels)
 library(emmeans)
 library(lmerTest)
-library(broom)
 options(scipen = 999)
 ```
 
-# Deposition --------------------------------------------------------------------------------
 
-```{r missouri-data}
+# Deposition
+
+## Load deposition dataset
+
+```{r load-data}
+#missouri
 path_mo <- "./data/deposition/Deposition data_MO.xlsx"
 
 missouri <- path_mo %>% 
@@ -46,10 +67,9 @@ missouri <- downwind_mo %>%
   bind_rows(upwind_mo) %>% 
   bind_rows(inswath_mo) %>% 
   mutate(location = "missouri")
-```
 
 
-```{r nebraska-data}
+#nebraska
 path_ne <- "./data/deposition/Deposition data_NE.xlsx"
 
 nebraska <- path_ne %>% 
@@ -72,10 +92,9 @@ nebraska <- downwind_ne %>%
   bind_rows(upwind_ne) %>% 
   bind_rows(inswath_ne) %>% 
   mutate(location = "nebraska")
-```
 
 
-```{r wisconsin-data}
+#wisconsin
 path_wi <- "./data/deposition/Deposition data_WI.xlsx"
 
 wisconsin <- path_wi %>% 
@@ -100,8 +119,9 @@ wisconsin <- downwind_wi %>%
   mutate(location = "wisconsin")
 ```
 
+### Join location datasets
 
-```{r}
+```{r join-data}
 data <- missouri %>% 
   bind_rows(nebraska) %>% 
   bind_rows(wisconsin) %>% 
@@ -114,32 +134,52 @@ data <- missouri %>%
          deposition_log = log10(deposition)) 
 ```
 
-## Inswath
+```{r}
+data 
+```
+
+
+## Deposition inswath ------------------------------------------------------
+
+### Filter deposition dataset inswath
 
 ```{r}
 inswath <-  data %>% 
   filter(type == "inswath")
 ```
 
+### Test ANOVA assumptions
+
+#### Normal distribution
 
 ```{r}
 inswath %>% 
   ggplot(aes(x = deposition)) +
   geom_histogram()
+# data has normal distribution
 ```
+
+#### Homogeneity of variances
 
 ```{r}
 bartlett.test(deposition ~ location, data = inswath)
+# can't compare locations
 ```
 
 
+### Data analysis
+
+#### Filter location
+
 ```{r}
+# nebraska and wisconsin 
 inswath1 <- inswath %>% 
   group_by(location) %>% 
   nest() %>% 
   filter(location != "missouri")
 ```
 
+#### Model
 
 ```{r}
 model <- function(df){
@@ -148,42 +188,41 @@ model <- function(df){
 }
 ```
 
+#### Fit models and ANOVA
+
 ```{r}
 inswath2 <- inswath1 %>% 
   mutate(model = map(data, model),
          anova = map(model, anova))
 ```
 
-```{r}
-inswath2 %>% 
-  unnest(anova)
-```
 
 
 ### Nebraska
 
 ```{r}
 model_ne <- inswath2$model[[1]]
-
+# anova
 anova(model_ne)
 ```
-
 
 #### Solution x sprayer 
 
 ```{r}
 lsmeans_ne1 <- emmeans(model_ne, ~ solution * sprayer, cont="pairwise", 
                       adjust="none", alpha=0.05)
-```
 
+lsmeans_ne1
+```
 
 ##### Plot
 
 ```{r}
 plot(lsmeans_ne1$emmeans, ~ solution * sprayer, comparisons=TRUE, 
      alpha=0.05, adjust="none") +
-  labs(title = "Nebraska (Solution vs Sprayer")
+  labs(title = "Nebraska (Solution vs Sprayer)")
 ```
+
 
 #### Solution x nozzle 
 
@@ -201,6 +240,7 @@ plot(lsmeans_ne2$emmeans, ~ solution * sprayer, comparisons=TRUE,
      alpha=0.05, adjust="none") +
   labs(title = "Nebraska (Solution vs Nozzle)")
 ```
+
 
 
 ### Wisconsin
@@ -224,9 +264,8 @@ lsmeans_wi <- emmeans(model_wi, ~ solution * nozzle | sprayer, cont="pairwise",
 ```{r}
 plot(lsmeans_wi$emmeans, ~ solution * nozzle | sprayer, comparisons=TRUE, 
      alpha=0.05, adjust="none") +
-  labs(title = "Wisconsin")
+  labs(title = "Wisconsin (Solution x nozzle by sprayer")
 ```
-
 
 
 ### Missouri 
@@ -243,97 +282,146 @@ model_mo <- lmer(deposition ~ sprayer * nozzle + (1|block),
 anova(model_mo)
 ```
 
+#### Sprayer
+
 ```{r}
 lsmeans_mo <- emmeans(model_mo, ~ sprayer, cont="pairwise", adjust="none", alpha=0.05)
 
-plot(lsmeans_mo$emmeans, ~ herbicide, comparisons=TRUE, alpha=0.05, adjust="none") +
- labs(title = "Missouri")
+lsmeans_mo
 ```
 
-## Upwind
+##### Plot
+
+```{r}
+plot(lsmeans_mo$emmeans, ~ herbicide, comparisons=TRUE, alpha=0.05, adjust="none") +
+ labs(title = "Missouri (sprayer)")
+```
+
+
+## Deposition upwind ------------------------------------------------------
+
+### Filter deposition dataset upwind
 
 ```{r}
 upwind <- data %>% 
   filter(type == "upwind")
 ```
 
+### Test ANOVA assumptions
+
+#### Normal distribution
+
+```{r}
+upwind %>% 
+  ggplot(aes(x = deposition)) +
+  geom_histogram() 
+# not normalized
+```
+
+##### Log scale
 
 ```{r}
 upwind %>% 
   ggplot(aes(x = log(deposition))) +
   geom_histogram()
+# yes!
 ```
+
+#### Homogeneity of variances
 
 ```{r}
 bartlett.test(deposition ~ location, data = upwind)
+# can't compare locations
 ```
 
 
 ### Nebraska
 
+#### Filter upwind Nebraska
+
 ```{r}
 ne_data <- upwind %>% 
   filter(location == "nebraska")
-  
+```
+
+#### Model
+
+```{r}
 ne_model <- lmer(log(deposition) ~ solution * sprayer * nozzle + (1|block), 
               REML = FALSE, data = ne_data)
+```
+
+#### ANOVA 
+
+```{r}
 anova(ne_model)
 ```
+
+#### Solution
 
 ```{r}
 ne_lsmeans <- emmeans(ne_model, ~ solution, cont="pairwise", type = "response",
                       adjust="none", alpha=0.05)
 
+ne_lsmeans
+```
+
+#### Plot
+
+```{r}
 plot(ne_lsmeans$emmeans, ~ solution, comparisons=TRUE, alpha=0.05, type = "response",
      adjust="none") +
- labs(title = "Nebraska - Upwind")
+ labs(title = "Nebraska (Solution)")
 ```
 
 ### Missouri
 
+#### Filter upwind Missouri
+
 ```{r}
 mo_data <- upwind %>% 
   filter(location == "missouri")
-  
+```
+
+#### Model
+
+```{r}
 mo_model <- lmer(log(deposition) ~ sprayer * nozzle + (1|block), 
               REML = FALSE, data = mo_data)
+```
 
+#### ANOVA
+
+```{r}
 anova(mo_model)
 ```
 
 ### Wisconsin
 
+#### Filter upwind Wisconsin
+
 ```{r}
 wi_data <- upwind %>% 
   filter(location == "wisconsin")
-  
+```
+
+#### Model
+
+```{r}
 wi_model <- lmer(log(deposition) ~ solution * sprayer * nozzle + (1|block), 
               REML = FALSE, data = wi_data)
+```
 
+#### ANOVA
+
+```{r}
 anova(wi_model)
 ```
 
 
-## Downwind ------------------------------------------------------------------------
+## Deposition downwind ------------------------------------------------------
 
-```{r}
-data %>% 
-  filter(type == "downwind") %>% 
-  ggplot(aes(x = log(distance_m), y = log(deposition), color = nozzle)) +
-  geom_point() +
-  facet_grid(~ location)
-```
-
-```{r}
-data %>% 
-  filter(type == "downwind") %>% 
-  ggplot(aes(x = log(deposition))) +
-  geom_histogram() +
-  facet_grid(~location)
-```
-
-### Downwind ------------------------------------------------------------------------
-
+### Filter deposition dataset downwind
 
 ```{r}
 data_dw <- data %>% 
@@ -341,12 +429,46 @@ data_dw <- data %>%
 ```
 
 
+### Visualize
+
+```{r}
+data_dw %>% 
+  ggplot(aes(x = distance_m, y = deposition, color = nozzle)) +
+  geom_point() +
+  facet_grid(~ location)
+# some trt have rapid decrease and some trt have linear trend
+```
+### Visualize (log scale)
+
+
+```{r}
+data_dw %>% 
+  ggplot(aes(x = log(distance_m), y = log(deposition), color = nozzle)) +
+  geom_point() +
+  facet_grid(~ location)
+# better go with log scale
+```
+
+### Normal distribution
+
+```{r}
+data_dw %>% 
+  ggplot(aes(x = log(deposition))) +
+  geom_histogram() +
+  facet_grid(~location)
+```
+
+### Arrange dataset
+
 ```{r}
 data_dw1 <- data_dw %>% 
   group_by(location, solution, sprayer, nozzle) %>% 
   nest()
+
+data_dw1
 ```
 
+### Model function
 
 ```{r}
 model <- function(df){
@@ -355,20 +477,16 @@ model <- function(df){
 }
 ```
 
+### Fit model and confidence intervals
 
 ```{r warning=FALSE, message = FALSE}
 data_dw2 <- data_dw1 %>% 
   mutate(model = map(data, model),
-         summary = map(model, tidy),
+         summary = map(model, broom.mixed::tidy),
          confint = map(model, confint))
 ```
 
-
-```{r}
-data_dw2 %>% 
-  unnest(summary) %>% 
-  filter(effect == "fixed")
-```
+### Get parameters from models
 
 ```{r}
 params <- data_dw2 %>% 
@@ -382,8 +500,11 @@ params <- data_dw2 %>%
          term = fct_recode(term,
                            "Intercept" = "(Intercept)")) %>% 
   unite("trt", c("solution", "sprayer", "nozzle"), sep = " ", remove = FALSE)
+
+params
 ```
 
+### Get confidence intervals
 
 ```{r}
 get_cis <- function(number){
@@ -397,24 +518,18 @@ number <- as_tibble(c(1:30))
 intervals <- number %>% 
   mutate(interval = map(value, get_cis)) %>% 
   unnest(interval)
-```
 
-
-```{r}
+# join to main dataset
 downwind_final <- params %>% 
   bind_cols(intervals) %>% 
   rename(lower = `2.5 %`,
-         upper = `97.5 %`)
+         upper = `97.5 %`) %>% 
+  mutate(across(where(is_double), round, 3))
 ```
 
+### Figure
 
-```{r}
-downwind_final %>% 
-  kableExtra::kable()
-```
-
-
-```{r}
+```{r fig.height=8, fig.width==6}
 downwind_final %>% 
   ggplot(aes(x = trt, y = estimate_exp, color = trt)) + 
   geom_point() +
@@ -422,25 +537,23 @@ downwind_final %>%
   facet_grid(location ~ term, scales = "free") +
   coord_flip() +
   scale_color_brewer(palette = "Paired") +
-  labs(y = "Estimates", x = "") +
+  labs(y = expression(paste("Estimates (ƞL/cm"^"2",")")), x = "") +
   theme_bw() +
-  theme(legend.position = "none") +
-  ggsave("downwind.png", height = 7, width = 6)
+  theme(legend.position = "none") 
 ```
 
 
+### Final downwind dataset 
+
+```{r}
+downwind_final %>% 
+  DT::datatable()
+```
 
 
+# Weather ----------------------------------------------------------------------
 
-
-
-
-
-
-
-
-# Weather --------------------------------------------------------------------------------
-
+## Read weather dataset
 
 ```{r message=FALSE}
 data_path <- "./data/weather"   
@@ -448,10 +561,7 @@ files <- dir(data_path, pattern = '*.xlsx')
 
 weather_data <- files %>%
   map(~ readxl::read_excel(file.path(data_path, .)))
-```
 
-
-```{r message=FALSE, warning=FALSE}
 weather_mo <- weather_data[[1]] %>% 
   janitor::row_to_names(row_number = 1)
 
@@ -462,7 +572,11 @@ weather_ne <- weather_data[[2]] %>%
 
 weather_wi <- weather_data[[3]] %>% 
   janitor::row_to_names(row_number = 1)
+```
 
+## Tidy weather dataset
+
+```{r message=FALSE}
 weather <- weather_mo %>% 
   bind_rows(weather_ne) %>% 
   bind_rows(weather_wi) %>% 
@@ -472,6 +586,7 @@ weather <- weather_mo %>%
             vars(pass:wind_speed_average_19), funs(round(.,5))) %>% 
   rename_at(vars(wind_direction_max_9:wind_speed_average_13), paste0, "_voltage") %>% 
   rename_at(vars(wind_direction_min_14:wind_direction_average_16), paste0, "_degress") %>% 
-  rename_at(vars(wind_speed_min_17:wind_speed_average_19), paste0, "_mph")
+  rename_at(vars(wind_speed_min_17:wind_speed_average_19), paste0, "_mph") %>% 
+  filter(!is.na(pass))
 ```
 
