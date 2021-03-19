@@ -418,6 +418,20 @@ wi_model <- lmer(log(deposition) ~ solution * sprayer * nozzle + (1|block),
 anova(wi_model)
 ```
 
+```{r}
+wi_lsmeans <- emmeans(wi_model, ~ solution, cont="pairwise", type = "response",
+                      adjust="none", alpha=0.05)
+
+wi_lsmeans
+```
+
+#### Plot
+
+```{r}
+plot(wi_lsmeans$emmeans, ~ solution, comparisons=TRUE, alpha=0.05, type = "response",
+     adjust="none") +
+ labs(title = "Wisconsin (Solution)")
+```
 
 ## Deposition downwind ------------------------------------------------------
 
@@ -438,6 +452,8 @@ data_dw %>%
   facet_grid(~ location)
 # some trt have rapid decrease and some trt have linear trend
 ```
+
+
 ### Visualize (log scale)
 
 
@@ -445,7 +461,8 @@ data_dw %>%
 data_dw %>% 
   ggplot(aes(x = log(distance_m), y = log(deposition), color = nozzle)) +
   geom_point() +
-  facet_grid(~ location)
+  facet_grid(sprayer ~ solution) +
+  geom_smooth(method = "lm")
 # better go with log scale
 ```
 
@@ -472,7 +489,7 @@ data_dw1
 
 ```{r}
 model <- function(df){
-  lmer(log10(deposition) ~ log10(distance_m) + 
+  lmer(log(deposition) ~ log(distance_m) + 
          (1|block), REML = FALSE, data = df)
 }
 ```
@@ -536,6 +553,20 @@ downwind_final %>%
   geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
   facet_grid(location ~ term, scales = "free") +
   coord_flip() +
+  scale_color_brewer(palette = "Paired") +
+  labs(y = expression(paste("Estimates (ƞL/cm"^"2",")")), x = "") +
+  theme_bw() +
+  theme(legend.position = "none") 
+```
+
+
+```{r}
+downwind_final %>% 
+  filter(location == "wisconsin" & term == "log(distance_m)") %>% 
+  ggplot(aes(x = fct_reorder(trt, estimate_exp), y = estimate_exp)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+   coord_flip() +
   scale_color_brewer(palette = "Paired") +
   labs(y = expression(paste("Estimates (ƞL/cm"^"2",")")), x = "") +
   theme_bw() +
