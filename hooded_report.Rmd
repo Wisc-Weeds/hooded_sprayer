@@ -34,6 +34,7 @@ library(tidyverse)
 library(lme4)
 library(emmeans)
 library(lmerTest)
+library(patchwork)
 options(scipen = 999)
 ```
 
@@ -442,6 +443,15 @@ data_dw <- data %>%
   filter(type == "downwind")
 ```
 
+```{r}
+data_dw %>% 
+  group_by(location, solution, sprayer, nozzle, distance_m) %>% 
+  summarise(mean_deposition = mean(deposition),
+            mean_deposition_log = log(mean_deposition)) %>% 
+  filter(distance_m == "1") %>% 
+  filter(location == "wisconsin")
+```
+
 
 ### Visualize
 
@@ -459,10 +469,11 @@ data_dw %>%
 
 ```{r}
 data_dw %>% 
+  filter(location == "wisconsin") %>% 
   ggplot(aes(x = log(distance_m), y = log(deposition), color = nozzle)) +
   geom_point() +
   facet_grid(sprayer ~ solution) +
-  geom_smooth(method = "lm")
+  geom_smooth(method = "lm") 
 # better go with log scale
 ```
 
@@ -509,13 +520,17 @@ data_dw2 <- data_dw1 %>%
 params <- data_dw2 %>% 
   unnest(summary) %>% 
   filter(effect == "fixed") %>% 
-  mutate(estimate_exp = exp(estimate)) %>% 
+  mutate(estimate_exp = exp(estimate),
+         estimate_exp = case_when(
+           term == "log(distance_m)" ~ -estimate_exp,
+           TRUE                      ~ estimate_exp
+         )) %>% 
   dplyr::select(location, solution, sprayer, nozzle, term, estimate, std.error, statistic, p.value, estimate_exp) %>% 
   mutate(p.value = round(p.value, 3)) %>% 
   mutate(term = fct_recode(term,
-                           "slope" = "log10(distance_m)"),
+                           slope = "log(distance_m)"),
          term = fct_recode(term,
-                           "Intercept" = "(Intercept)")) %>% 
+                           Intercept = "(Intercept)")) %>% 
   unite("trt", c("solution", "sprayer", "nozzle"), sep = " ", remove = FALSE)
 
 params
@@ -525,39 +540,214 @@ params
 
 ```{r}
 get_cis <- function(number){
-  exp(data_dw2$confint[[number]]) %>% 
-    as_tibble() %>% 
+  exp(data_dw2$confint[[number]]) %>%
+    as_tibble() %>%
     slice_tail(n=2)
-}
+} 
 
 number <- as_tibble(c(1:30))
 
-intervals <- number %>% 
-  mutate(interval = map(value, get_cis)) %>% 
+intervals <- number %>%
+  mutate(interval = map(value, get_cis)) %>%
   unnest(interval)
 
 # join to main dataset
-downwind_final <- params %>% 
-  bind_cols(intervals) %>% 
+downwind_final <- params %>%
+  bind_cols(intervals) %>%
   rename(lower = `2.5 %`,
-         upper = `97.5 %`) %>% 
+         upper = `97.5 %`) %>%
+  mutate(lower = case_when(
+           term == "log(distance_m)" ~ -lower,
+         TRUE                        ~ lower
+         ),
+         upper = case_when(
+           term == "log(distance_m)" ~ -upper,
+         TRUE                        ~ upper,
+         )) %>% 
   mutate(across(where(is_double), round, 3))
 ```
 
-### Figure
 
-```{r fig.height=8, fig.width==6}
-downwind_final %>% 
-  ggplot(aes(x = trt, y = estimate_exp, color = trt)) + 
+## Distance of deposition at 0
+
+```{r}
+distance_final <- downwind_final %>% 
+  dplyr::select(trt, term, estimate_exp) %>% 
+  pivot_wider(
+              names_from = term, 
+              values_from = estimate_exp) 
+```
+
+
+```{r}
+distance_function <- function(int, slope, y = 0) {
+  distance = (y - int) / slope
+  return(distance)
+}
+
+distance_final1 <- distance_final %>% 
+  mutate(distance_m = map2_dbl(Intercept, slope, distance_function),
+         distance_m = round(distance_m, 10)) 
+```
+
+## Predict
+
+
+```{r}
+linear <- function(a, b, d) {
+  y = a + b*d
+  return(y)
+}
+
+linear(distance_final1$Intercept, distance_final1$slope, distance_final1$distance_m)
+```
+
+
+
+```{r}
+nd <- tibble(distance_m = seq(log(1:60), by = 0.1))
+
+predict(data_dw2$model[[1]], newdata = nd, re.form= NA, interval = "prediction") 
+```
+
+
+
+```{r}
+
+data_dw2 %>% 
+  left_join(distance_final1) %>% 
+  mutate(fit = map2_dbl(model, distance_m, ~predict))
+
+augment(data_dw2$model[[1]], 
+            new_data = distance_final1, 
+             type = "conf_int")
+```
+
+
+```{r}
+data_dw2 %>% 
+  left_join(distance_final1) %>% 
+  mutate(fit = map2(model, distance_m, predict, type = 'conf_int'))
+```
+
+
+### Figure 
+
+```{r fig.height=8, fig.width==6} 
+downwind_final %>%
+  ggplot(aes(x = trt, y = estimate_exp, color = trt)) +
   geom_point() +
   geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
   facet_grid(location ~ term, scales = "free") +
-  coord_flip() +
+  coord_flip() + 
+  scale_color_brewer(palette = "Paired") + 
+  labs(y = expression(paste("Estimates (ƞL/cm"^"2",")")), x = "") + 
+  theme_bw() + 
+  theme(legend.position = "none") 
+``` 
+
+
+```{r}
+downwind_final1 <- downwind_final %>% 
+  pivot_wider(id_cols = location:nozzle,
+              names_from = term, 
+              values_from = estimate_exp) 
+```
+
+
+```{r}
+a <- downwind_final %>% 
+  filter(term == "Intercept") %>% 
+  filter(location == "wisconsin") %>% 
+  ggplot(aes(x = reorder(trt, estimate_exp), y = estimate_exp, color = trt)) +
+  geom_point(size = 2, stroke = 1) +
   scale_color_brewer(palette = "Paired") +
-  labs(y = expression(paste("Estimates (ƞL/cm"^"2",")")), x = "") +
+  geom_linerange(aes(ymin = lower, ymax = upper), size = 1.5) +
+  coord_flip() +
+  labs(title = "Intercept", 
+       y = expression(paste("Estimates (ƞL/cm"^"2",")")), x = "") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+b <- downwind_final %>% 
+  filter(term == "slope") %>% 
+  filter(location == "wisconsin") %>% 
+  ggplot(aes(x = reorder(trt, estimate_exp), y = estimate_exp, color = trt)) +
+  geom_point(size = 2, stroke = 1) +
+  scale_color_brewer(palette = "Paired") +
+  geom_linerange(aes(ymin = -lower, ymax = -upper), size = 1.5) +
+  coord_flip() +
+  labs(title = "Slope", 
+       y = expression(paste("Estimates (ƞL/cm"^"2",")")), x = "") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+c <- distance_final1 %>% 
+  filter(location == "wisconsin") %>% 
+  ggplot(aes(x = reorder(trt, distance_m), 
+             y = distance_m,
+             label = distance_m, fill = trt)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_brewer(palette = "Paired") +
+  labs(title = "0 deposition", 
+       y = "distance (m)", x = "") +
+#  geom_label(aes(label = distance_0)) +
+  ylim(0,115) +
   theme_bw() +
   theme(legend.position = "none") 
+
+
+library(patchwork)
+
+p <- a | b | c
+  ggsave("wisconsin.png", p, width = 9, height = 3)
+
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+data_dw2 %>% 
+  left_join(distance_final1) %>% 
+  mutate(`log(distance_m)` = log(distance_0)) %>% 
+  mutate(predict = map2_dbl(model, `log(distance_m)`, ~predict))
+```
+
+```{r}
+data_dw2$model
+```
+
+
+```{r}
+distance_final1 %>% 
+  ggplot(aes(x = fct_reorder(trt, distance_0), 
+             y = distance_0,
+             label = distance_0)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_color_brewer(palette = "Paired") +
+  labs(title = "Estimated distance where no herbicide solution deposition is predicted", 
+       y = "distance (m)", x = "") +
+  geom_label(aes(label = distance_0)) +
+  ylim(0,115) +
+  facet_grid(~ location) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  ggsave("distance.pdf", height = 5, width = 8)
+```
+
+
+
 
 
 ```{r}
@@ -572,6 +762,11 @@ downwind_final %>%
   theme_bw() +
   theme(legend.position = "none") 
 ```
+
+
+
+
+
 
 
 ### Final downwind dataset 
