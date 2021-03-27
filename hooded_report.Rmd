@@ -3,7 +3,7 @@ title: "Hooded sprayer studies in Missouri, Nebraska and Wisconsin"
 author: "Maxwel Coura Oliveira, Guilherme Alves and Rodrigo Werle"
 date: "`r Sys.Date()`"
 output:
-  prettydoc::html_pretty:
+  prettydoc::html_pretty: 
     theme: architect
     highlight: github
     toc: true
