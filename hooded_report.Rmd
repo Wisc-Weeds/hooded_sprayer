@@ -470,6 +470,7 @@ data_dw %>%
 ```{r}
 data_dw %>% 
   filter(location == "wisconsin") %>% 
+#  unite("trt", c("solution", "sprayer", "nozzle")) %>% 
   ggplot(aes(x = log(distance_m), y = log(deposition), color = nozzle)) +
   geom_point() +
   facet_grid(sprayer ~ solution) +
@@ -514,6 +515,12 @@ data_dw2 <- data_dw1 %>%
          confint = map(model, confint))
 ```
 
+```{r}
+wi <- data_dw2 %>% 
+  filter(location == "wisconsin")
+```
+
+
 ### Get parameters from models
 
 ```{r}
@@ -535,6 +542,11 @@ params <- data_dw2 %>%
 
 params
 ```
+
+```{r}
+3.240361565	-1.481574388*(4.727388)
+```
+
 
 ### Get confidence intervals
 
@@ -613,7 +625,6 @@ predict(data_dw2$model[[1]], newdata = nd, re.form= NA, interval = "prediction")
 
 
 ```{r}
-
 data_dw2 %>% 
   left_join(distance_final1) %>% 
   mutate(fit = map2_dbl(model, distance_m, ~predict))
@@ -629,6 +640,13 @@ data_dw2 %>%
   left_join(distance_final1) %>% 
   mutate(fit = map2(model, distance_m, predict, type = 'conf_int'))
 ```
+
+
+```{r}
+distance_final %>% 
+  mutate(distance = tibble(list(0:130))) 
+```
+
 
 
 ### Figure 
