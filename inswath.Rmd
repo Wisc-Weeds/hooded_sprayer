@@ -1,0 +1,188 @@
+---
+title: "inswath"
+author: "Maxwel Coura Oliveira"
+date: "3/29/2021"
+output: html_document
+---
+
+
+## Deposition inswath ------------------------------------------------------
+
+### Filter deposition dataset inswath
+
+```{r}
+inswath <-  data %>% 
+  filter(type == "inswath")
+```
+
+### Test ANOVA assumptions
+
+#### Normal distribution
+
+```{r}
+inswath %>% 
+  ggplot(aes(x = deposition)) +
+  geom_histogram()
+# data has normal distribution
+```
+
+#### Homogeneity of variances
+
+```{r}
+bartlett.test(deposition ~ location, data = inswath)
+# can't compare locations
+```
+
+
+### Data analysis
+
+#### Filter location
+
+```{r}
+# nebraska and wisconsin 
+inswath1 <- inswath %>% 
+  group_by(location) %>% 
+  nest() %>% 
+  filter(location != "missouri")
+```
+
+#### Model
+
+```{r}
+model <- function(df){
+  lmer(deposition ~ solution * sprayer * nozzle + (1|block), 
+              REML = FALSE, data = df)
+}
+```
+
+#### Fit models and ANOVA
+
+```{r}
+inswath2 <- inswath1 %>% 
+  mutate(model = map(data, model),
+         anova = map(model, anova))
+```
+
+
+
+### Nebraska
+
+```{r}
+model_ne <- inswath2$model[[1]]
+# anova
+anova(model_ne)
+```
+
+#### Solution x sprayer 
+
+```{r}
+lsmeans_ne1 <- emmeans(model_ne, ~ solution * sprayer, cont="pairwise", 
+                      adjust="none", alpha=0.05)
+
+lsmeans_ne1
+```
+
+##### Plot
+
+```{r}
+plot(lsmeans_ne1$emmeans, ~ solution * sprayer, comparisons=TRUE, 
+     alpha=0.05, adjust="none") +
+  labs(title = "Nebraska (Solution vs Sprayer)")
+```
+
+
+#### Solution x nozzle 
+
+```{r}
+lsmeans_ne2 <- emmeans(model_ne, ~ solution * nozzle, cont="pairwise", 
+                      adjust="none", alpha=0.05)
+
+lsmeans_ne2
+```
+
+##### Plot
+
+```{r}
+plot(lsmeans_ne2$emmeans, ~ solution * sprayer, comparisons=TRUE, 
+     alpha=0.05, adjust="none") +
+  labs(title = "Nebraska (Solution vs Nozzle)")
+```
+
+
+
+### Wisconsin
+
+```{r}
+model_wi <- inswath2$model[[2]]
+
+#anova
+anova(model_wi)
+```
+
+
+#### Solution x nozzle by sprayer
+
+```{r}
+lsmeans_wi <- emmeans(model_wi, ~ solution * nozzle | sprayer, cont="pairwise", 
+                      adjust="none", alpha=0.05)
+```
+##### Plot 
+
+```{r}
+plot(lsmeans_wi$emmeans, ~ solution * nozzle | sprayer, comparisons=TRUE, 
+     alpha=0.05, adjust="none") +
+  labs(title = "Wisconsin (Solution x nozzle by sprayer")
+```
+
+```{r}
+wi_insw <- as_tibble(lsmeans_wi$emmeans) %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ", remove = FALSE)
+wi_insw 
+```
+
+```{r}
+d <- wi_insw %>% 
+  ggplot(aes(x = fct_reorder(trt, emmean), y = emmean, color = trt)) +
+  geom_point(size = 2, stroke = 1) +
+  geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size = 1.5) +
+  scale_color_brewer(palette = "Paired") +
+  coord_flip() +
+  labs(title = "Inswath",
+       x = "", y = expression(paste("Solution deposition (ƞL/cm"^"2",")"))) +
+  ylim(0, 1500) +
+  theme_test() +
+  theme(legend.position = "none") 
+```
+
+
+
+
+
+### Missouri 
+
+```{r}
+data_missou <- inswath %>% 
+  filter(location == "missouri")
+
+#missou model has no solution levels
+model_mo <- lmer(deposition ~ sprayer * nozzle + (1|block), 
+              REML = FALSE, data = data_missou)
+
+#anova
+anova(model_mo)
+```
+
+#### Sprayer
+
+```{r}
+lsmeans_mo <- emmeans(model_mo, ~ sprayer, cont="pairwise", adjust="none", alpha=0.05)
+
+lsmeans_mo
+```
+
+##### Plot
+
+```{r}
+plot(lsmeans_mo$emmeans, ~ herbicide, comparisons=TRUE, alpha=0.05, adjust="none") +
+ labs(title = "Missouri (sprayer)")
+```

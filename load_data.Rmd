@@ -1,0 +1,134 @@
+---
+title: "load data"
+author: "Maxwel Coura Oliveira"
+date: "3/31/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = 'center')
+```
+
+<center>
+```{r echo=FALSE}
+library(tweetrmd)
+tweet_embed("https://twitter.com/i/status/1306184791042256897")
+```
+</center>
+
+
+# Packages
+
+```{r message = FALSE}
+library(tidyverse)
+library(lme4)
+library(emmeans)
+library(lmerTest)
+library(patchwork)
+options(scipen = 999)
+```
+
+
+# Deposition
+
+## Load deposition dataset
+
+```{r load-data}
+#missouri
+path_mo <- "./data/deposition/Deposition data_MO.xlsx"
+
+missouri <- path_mo %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_mo", "upwind_mo", "inswath_mo")) %>% 
+  map(readxl::read_excel, path = path_mo)
+
+
+
+downwind_mo <- missouri$downwind_mo %>% 
+  mutate(type = "downwind")
+upwind_mo <- missouri$upwind_mo %>% 
+  mutate('distance (m)' = NA,
+         type = "upwind")
+inswath_mo <- missouri$inswath_mo %>%
+  mutate('distance (m)' = NA,
+         type = "inswath") %>% 
+  dplyr::select(-...8)
+
+missouri <- downwind_mo %>% 
+  bind_rows(upwind_mo) %>% 
+  bind_rows(inswath_mo) %>% 
+  mutate(location = "missouri")
+
+
+#nebraska
+path_ne <- "./data/deposition/Deposition data_NE.xlsx"
+
+nebraska <- path_ne %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_ne", "upwind_ne", "inswath_ne")) %>% 
+  map(readxl::read_excel, path = path_ne)
+
+
+
+downwind_ne <- nebraska$downwind_ne %>% 
+  mutate(type = "downwind")
+upwind_ne <- nebraska$upwind_ne %>% 
+  mutate('distance (m)' = NA,
+         type = "upwind")
+inswath_ne <- nebraska$inswath_ne %>%
+  mutate('distance (m)' = NA,
+         type = "inswath")
+
+nebraska <- downwind_ne %>% 
+  bind_rows(upwind_ne) %>% 
+  bind_rows(inswath_ne) %>% 
+  mutate(location = "nebraska")
+
+
+#wisconsin
+path_wi <- "./data/deposition/Deposition data_WI.xlsx"
+
+wisconsin <- path_wi %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_wi", "upwind_wi", "inswath_wi")) %>% 
+  map(readxl::read_excel, path = path_wi)
+
+
+
+downwind_wi <- wisconsin$downwind_wi %>% 
+  mutate(type = "downwind")
+upwind_wi <- wisconsin$upwind_wi %>% 
+  mutate('distance (m)' = NA,
+         type = "upwind")
+inswath_wi <- wisconsin$inswath_wi %>%
+  mutate('distance (m)' = NA,
+         type = "inswath")
+
+wisconsin <- downwind_wi %>% 
+  bind_rows(upwind_wi) %>% 
+  bind_rows(inswath_wi) %>% 
+  mutate(location = "wisconsin")
+```
+
+### Join location datasets
+
+```{r join-data}
+data <- missouri %>% 
+  bind_rows(nebraska) %>% 
+  bind_rows(wisconsin) %>% 
+  janitor::clean_names() %>% 
+  rename(deposition = n_l_cm2) %>% 
+  mutate_if(is_character, as_factor) %>% 
+  mutate(block = as_factor(block)) %>% 
+  mutate(distance_m = replace_na(distance_m, 0)) %>% 
+  mutate(distance_log = log10(distance_m),
+         deposition_log = log10(deposition)) 
+```
+
+```{r}
+data 
+```

@@ -1,0 +1,165 @@
+---
+title: "upwind"
+author: "Maxwel Coura Oliveira"
+date: "3/29/2021"
+output: html_document
+---
+
+## Deposition upwind ------------------------------------------------------
+
+### Filter deposition dataset upwind
+
+```{r}
+upwind <- data %>% 
+  filter(type == "upwind")
+```
+
+### Test ANOVA assumptions
+
+#### Normal distribution
+
+```{r}
+upwind %>% 
+  ggplot(aes(x = deposition)) +
+  geom_histogram() 
+# not normalized
+```
+
+##### Log scale
+
+```{r}
+upwind %>% 
+  ggplot(aes(x = log(deposition))) +
+  geom_histogram()
+# yes!
+```
+
+#### Homogeneity of variances
+
+```{r}
+bartlett.test(deposition ~ location, data = upwind)
+# can't compare locations
+```
+
+
+### Nebraska
+
+#### Filter upwind Nebraska
+
+```{r}
+ne_data <- upwind %>% 
+  filter(location == "nebraska")
+```
+
+#### Model
+
+```{r}
+ne_model <- lmer(log(deposition) ~ solution * sprayer * nozzle + (1|block), 
+              REML = FALSE, data = ne_data)
+```
+
+#### ANOVA 
+
+```{r}
+anova(ne_model)
+```
+
+#### Solution
+
+```{r}
+ne_lsmeans <- emmeans(ne_model, ~ solution, cont="pairwise", type = "response",
+                      adjust="none", alpha=0.05)
+
+ne_lsmeans
+```
+
+#### Plot
+
+```{r}
+plot(ne_lsmeans$emmeans, ~ solution, comparisons=TRUE, alpha=0.05, type = "response",
+     adjust="none") +
+ labs(title = "Nebraska (Solution)")
+```
+
+### Missouri
+
+#### Filter upwind Missouri
+
+```{r}
+mo_data <- upwind %>% 
+  filter(location == "missouri")
+```
+
+#### Model
+
+```{r}
+mo_model <- lmer(log(deposition) ~ sprayer * nozzle + (1|block), 
+              REML = FALSE, data = mo_data)
+```
+
+#### ANOVA
+
+```{r}
+anova(mo_model)
+```
+
+### Wisconsin
+
+#### Filter upwind Wisconsin
+
+```{r}
+wi_data <- upwind %>% 
+  filter(location == "wisconsin")
+```
+
+#### Model
+
+```{r}
+wi_model <- lmer(log(deposition) ~ solution * sprayer * nozzle + (1|block), 
+              REML = FALSE, data = wi_data)
+```
+
+#### ANOVA
+
+```{r}
+anova(wi_model)
+```
+
+```{r}
+wi_lsmeans <- emmeans(wi_model, ~ solution, cont="pairwise", type = "response",
+                      adjust="none", alpha=0.05)
+
+wi_lsmeans
+```
+
+#### Plot
+
+```{r}
+plot(wi_lsmeans$emmeans, ~ solution, comparisons=TRUE, alpha=0.05, type = "response",
+     adjust="none") +
+ labs(title = "Wisconsin (Solution)")
+```
+
+
+```{r}
+wi_up <- as_tibble(wi_lsmeans$emmeans) 
+
+wi_up 
+```
+
+```{r}
+e <- wi_up %>% 
+  ggplot(aes(x = fct_reorder(solution, response), y = response,
+             color = solution)) +
+  geom_point(size = 2, stroke = 1) +
+  geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size = 1.5) +
+  coord_flip() +
+  scale_color_manual(values = c("red", "black")) +
+  labs(title = " Upwind",
+    x = "", y = expression(paste("Solution deposition (ƞL/cm"^"2",")"))) +
+  ylim(0, 0.05) +
+  theme_test() +
+  theme(legend.position = "none")
+
+e
+```
