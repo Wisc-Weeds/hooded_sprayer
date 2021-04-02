@@ -276,7 +276,7 @@ b <- downwind_final %>%
   geom_linerange(aes(ymin = -lower, ymax = -upper), size = 1.5) +
   coord_flip() +
   geom_text(aes(x = 11.6, y = -0.43,
-                label = "Higher values lower spray \nparticle deposition"),
+                label = "Higher values lower spray \nparticle deposition rate"),
             stat = "unique", family = "bell",
             size = 4, color = "darkcyan") +
   labs(title = "Slope at downwind", 
@@ -306,7 +306,6 @@ c <- distance_final1 %>%
   scale_fill_brewer(palette = "Paired") +
   geom_text(aes(x = 1, y = 70),
                 label = expression(paste("Distance where spray \nparticle deposition reached 0 nL/cm"^"2"," ")),
-                #label = "Distance where solution \ndeposition reached 0 "),
             stat = "unique", family = "bell",
             size = 4, color = "darkcyan") +
   labs(title = "Predicted downwind distance (m)", 
@@ -377,14 +376,15 @@ auc_data1 %>%
 
 ```{r}
 auc_data2 <- auc_data1 %>% 
-  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ") %>% 
-  nest(-location)
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ", remove = FALSE) %>% 
+  nest(-location) %>% 
+  filter(location != "missouri")
 ```
 
 
 ```{r}
 auc_model <- function(df) {
-  lmer(log(auc) ~ trt + (1|block), data=df)
+  lmer(log(auc) ~ solution * sprayer * nozzle + (1|block), data=df)
 }
 ```
 
@@ -400,14 +400,91 @@ auc_data3 <- auc_data2 %>%
 auc_data3 %>% 
   unnest(anova)
 ```
+```{r}
+auc_data3$anova[[2]]
+```
 
-```{r emmeans_function}
+```{r}
+emm_wi <- emmeans(auc_data3$model[[2]], ~ solution * sprayer, cont="pairwise", 
+                      adjust="none", alpha=0.05, type = "response")
+emm_wi
+
+emm_wi_noz <- emmeans(auc_data3$model[[2]], ~ nozzle, cont="pairwise", 
+                      adjust="none", alpha=0.05, type = "response")
+emm_wi_noz
+```
+
+```{r}
+wis_cld <- as_tibble(multcomp::cld(emm_wi$emmeans, alpha=0.05, 
+                         Letters=letters, adjust="none", reversed = TRUE)) %>% 
+  unite("trt", c("solution", "sprayer"), sep = " ", remove = FALSE)
+
+wis_cld_noz <- as_tibble(multcomp::cld(emm_wi_noz$emmeans, alpha=0.05, 
+                         Letters=letters, adjust="none", reversed = TRUE)) %>% 
+  dplyr::select(-SE, -df) %>% 
+  rename(Nozzle = nozzle, 
+         AUC = response, 
+         Group = .group) %>% 
+  mutate_if(is_double, ~round(.,1)) %>% 
+  unite("CI", c("lower.CL", "upper.CL"), sep = "-") 
+
+
+wis_cld_noz
+```
+
+```{r}
+auc_wi <- wis_cld %>% 
+ggplot(aes(x=reorder(trt, response), 
+               y=response, color=trt, label = .group)) + 
+  geom_point(size = 2, stroke = 1) +
+  ylim(0,75) +
+ scale_color_brewer(palette = "Paired") +
+  theme_test() + 
+  geom_text(aes(x = 3.5, y = 20,
+                label = "Lower values \nless spray particle \ndeposition \nfrom 1 to 60 m"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Area under the curve at downwind",
+       y= "", x="") +
+  annotate(geom = "table", x = 1.7, y = 20, color = "#282728",
+           label = list(wis_cld_noz), 
+           vjust = 1, hjust = 0) +
+  geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size=1.5) + 
+  coord_flip() +
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
+  auc_wi 
+```
+
+```{r}
+auc_wi_noz <- wis_cld_noz %>% 
+ggplot(aes(x=reorder(nozzle, response), 
+               y=response, color=nozzle, label = .group)) + 
+  geom_point(size = 2, stroke = 1) +
+#  ylim(0,100) +
+ scale_color_brewer(palette = "Paired") +
+  theme_test() + 
+  geom_text(aes(x = 3.5, y = 5,
+                label = "Nozzle"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "",
+       y= "", x="") +
+  geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size=1.5) + 
+  coord_flip() +
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka", color = "#282728"),
+        plot.background = element_rect(fill = "#F5F5F5", color = NA))
+auc_wi_noz
+```
+
+```{r emmeans_function, eval=FALSE, include=FALSE}
 auc_data4 <- auc_data3 %>% 
   mutate(
     emmeans = pmap(
       .l = list(
         object = model, 
-        specs = "trt",
+        specs = "solution * sprayer",
         type= "response",
 #        cont="pairwise", 
         adjust="none"
@@ -415,43 +492,30 @@ auc_data4 <- auc_data3 %>%
       .f = emmeans
     )
   ) 
-```
 
 
-```{r lsmeans}
+
 # full data frame with all means and CIs 
 auc_data4 %>% 
   mutate(emm2 = map(emmeans, data.frame)) %>% 
   unnest(emm2)
 #You can filter and make a data frame for each population and dat
-```
 
-
-```{r cld-function}
 cld_function <- function(emmeans) {
   if(requireNamespace("multcomp")) {
     multcomp::cld(emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
 }
 }
-```
 
-
-```{r cld}
 auc_data5 <- auc_data4 %>% 
   mutate(cld = map(emmeans, cld_function))
-```
 
-
-```{r}
 # here is similar to emmeans but you have letters
 auc_data6 <- auc_data5 %>% 
   unnest(cld) %>% 
   mutate(label_at = upper.CL - response + 15)
 # You can also filter and make specific data frames
-```
 
-
-```{r}
 auc_wi <- auc_data6 %>% 
   filter(location == "wisconsin") %>% 
     mutate(trt = factor(trt, levels = c(

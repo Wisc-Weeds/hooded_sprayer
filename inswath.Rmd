@@ -150,6 +150,12 @@ wi_insw
 
 ```{r}
 d <- wi_insw %>% 
+  mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
   ggplot(aes(x = fct_reorder(trt, emmean), y = emmean, color = trt, label = .group)) +
   geom_point(size = 2, stroke = 1) +
   geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size = 1.5) +

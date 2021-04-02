@@ -26,21 +26,26 @@ theme_style <- theme(legend.position = "bottom",
                      text = element_text(family = "Arial Black", color = title),
                      plot.subtitle = element_markdown(size = 10, hjust = 0,
                                                   color = title),
-                     plot.caption = element_text(size = 7))
+                     plot.caption = element_text(size = 7, family = "lobster"))
 
 
 theme_set(theme_style)
 ```
 
 
+
+
+
 ```{r}
 p <- (e | d) / (a | b) / (auc_wi | c) +
   plot_annotation(title = "Spray particle deposition study in <b style='color:#C5050C;'>Wisconsin</b>",
-                  subtitle = "Investigations of spray particle deposition at upwind, inswath and downwind. <b style='color:#0479a8;'>ANOVA</b> was perfomed for pray particle deposition at upwind and <br>inswath, and a <b style='color:#0479a8;'>Linear Model</b> was used to predict pray particle deposition with distance at downwind. Hooded sprayer makes a bigger <br>difference on spray particle deposition, followed by nozzle and drift reduction agent.",
+                  subtitle = "Investigations of spray particle deposition at upwind, inswath and downwind. <b style='color:#0479a8;'>ANOVA</b> was perfomed for spray particle deposition at upwind and <br>inswath, and a <b style='color:#0479a8;'>Linear Model</b> was used to predict pray particle deposition with distance at downwind. Hooded sprayer makes a bigger <br>difference on spray particle deposition, followed by nozzle and drift reduction agent.",
+                  caption = 'University of Wisconsin-Madison | @maxwelco',
                   theme = theme(plot.title = element_markdown(size = 20, margin = margin(3, 0, 3, 0),
                                                           family = "fredoka"))) &
   theme(plot.background = element_rect(fill = "#FFFFFF", color = NA),
-        panel.background = element_rect(fill = "#F5F5F5", color = NA))
+        panel.background = element_rect(fill = "#F5F5F5", color = NA)) &
+  plot_layout(guides = "collect")
 
 
   ggsave("wisconsin.pdf", p, width = 9, height = 12)

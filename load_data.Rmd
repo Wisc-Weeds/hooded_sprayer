@@ -23,6 +23,7 @@ knitr::opts_chunk$set(
 library(tidyverse)
 library(lme4)
 library(emmeans)
+library(ggpmisc)
 library(lmerTest)
 library(patchwork)
 library(ggtext)
@@ -37,6 +38,7 @@ font_add_google("Playfair Display", ## name of Google font
 font_add_google("Bangers", "Bangers")
 font_add_google("Schoolbell", "bell")
 font_add_google("Fredoka One", "fredoka")
+font_add_google("Lobster", "lobster")
 ```
 
 
