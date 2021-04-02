@@ -247,15 +247,15 @@ a <- downwind_final %>%
   scale_color_brewer(palette = "Paired") +
   geom_linerange(aes(ymin = lower, ymax = upper), size = 1.5) +
   coord_flip() +
-  geom_text(aes(x = 1, y = 25,
-                label = "Lower values lower deposition"),
+  geom_text(aes(x = 1.5, y = 25,
+                label = "Lower values lower spray \nparticle deposition"),
             stat = "unique", family = "bell",
             size = 4, color = "darkcyan") +
   labs(title = "Intercept at downwind", 
-       y = expression(paste("Solution deposition (\u03b7L/cm"^"2",")")), x = "") +
+       y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")")), x = "") +
   theme_test() +
   theme(legend.position = "none",
-        plot.title = element_markdown(family = "fredoka")) 
+        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
 a
 ```
 
@@ -275,15 +275,15 @@ b <- downwind_final %>%
   scale_color_brewer(palette = "Paired") +
   geom_linerange(aes(ymin = -lower, ymax = -upper), size = 1.5) +
   coord_flip() +
-  geom_text(aes(x = 12, y = -0.43,
-                label = "Higher values lower deposition rate"),
+  geom_text(aes(x = 11.6, y = -0.43,
+                label = "Higher values lower spray \nparticle deposition"),
             stat = "unique", family = "bell",
             size = 4, color = "darkcyan") +
   labs(title = "Slope at downwind", 
-       y = expression(paste("Solution deposition (\u03b7L/cm"^"2",")")), x = "") +
+       y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")")), x = "") +
   theme_test() +
   theme(legend.position = "none",
-        plot.title = element_markdown(family = "fredoka")) 
+        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
 b
 ```
 
@@ -302,52 +302,28 @@ c <- distance_final1 %>%
              label = distance_m, fill = trt)) +
   geom_bar(stat = "identity") +
   coord_flip() +
+  geom_label(aes(label = round(distance_m, 0))) +
   scale_fill_brewer(palette = "Paired") +
-  geom_text(aes(x = 2, y = 80,
-                label = "Distance where dicamba \nreached 0 deposition"),
+  geom_text(aes(x = 1, y = 70),
+                label = expression(paste("Distance where spray \nparticle deposition reached 0 nL/cm"^"2"," ")),
+                #label = "Distance where solution \ndeposition reached 0 "),
             stat = "unique", family = "bell",
             size = 4, color = "darkcyan") +
-  labs(title = "Predicted downwind distance", 
-       y = "Distance (m)", x = "") +
+  labs(title = "Predicted downwind distance (m)", 
+       y = "", x = "") +
 #  geom_label(aes(label = distance_0)) +
   ylim(0,115) +
   theme_test() +
   theme(legend.position = "none",
-        plot.title = element_markdown(family = "fredoka")) 
+        plot.title = element_markdown(family = "fredoka", color = "#282728"),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
 c
 ```
 
 
 
-```{r}
-data_dw2 %>% 
-  left_join(distance_final1) %>% 
-  mutate(`log(distance_m)` = log(distance_0)) %>% 
-  mutate(predict = map2_dbl(model, `log(distance_m)`, ~predict))
-```
 
-```{r}
-data_dw2$model
-```
-
-
-```{r}
-distance_final1 %>% 
-  ggplot(aes(x = fct_reorder(trt, distance_m), 
-             y = distance_m,
-             label = distance_m)) +
-  geom_bar(stat = "identity") +
-  coord_flip() +
-  scale_color_brewer(palette = "Paired") +
-  labs(title = "Estimated distance where no herbicide solution deposition is predicted", 
-       y = "distance (m)", x = "") +
-  geom_label(aes(label = round(distance_m, 0))) +
-  ylim(0,115) +
-  facet_grid(~ location) +
-  theme_bw() +
-  theme(legend.position = "none") +
-  ggsave("distance.pdf", height = 5, width = 8)
-```
 
 
 
@@ -469,7 +445,8 @@ auc_data5 <- auc_data4 %>%
 ```{r}
 # here is similar to emmeans but you have letters
 auc_data6 <- auc_data5 %>% 
-  unnest(cld)
+  unnest(cld) %>% 
+  mutate(label_at = upper.CL - response + 15)
 # You can also filter and make specific data frames
 ```
 
@@ -482,23 +459,25 @@ auc_wi <- auc_data6 %>%
     "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
     "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
     "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
-  ))) %>% 
+  ))) %>%
 ggplot(aes(x=reorder(trt, response), 
-               y=response, color=trt)) + 
+               y=response, color=trt, label = .group)) + 
   geom_point(size = 2, stroke = 1) +
 #  ylim(0,100) +
  scale_color_brewer(palette = "Paired") +
+  geom_text(nudge_y = c(66.0, 60.2, 53.6, 36.8, 34.4, 28.3,  
+                        19.1, 17.5, 11.6, 7.1, 3.8, 3.1)) +
   theme_test() + 
-  geom_text(aes(x = 1.5, y = 90,
-                label = "Lower values less dicamba deposition \nfrom 1 to 60 m"),
+  geom_text(aes(x = 1.5, y = 100,
+                label = "Lower values less spray \nparticle deposition from 1 to 60 m"),
             stat = "unique", family = "bell",
             size = 4, color = "darkcyan") +
   labs(title = "Area under the curve at downwind",
-       y= "Area under the curve", x="") +
+       y= "", x="") +
   geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size=1.5) + 
   coord_flip() +
   theme(legend.position = "none",
-        plot.title = element_markdown(family = "fredoka")) 
+        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
 auc_wi
 ```
 

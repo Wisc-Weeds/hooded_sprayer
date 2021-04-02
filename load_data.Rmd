@@ -13,12 +13,8 @@ knitr::opts_chunk$set(
   fig.align = 'center')
 ```
 
-<center>
-```{r echo=FALSE}
-library(tweetrmd)
-tweet_embed("https://twitter.com/i/status/1306184791042256897")
-```
-</center>
+
+
 
 
 # Packages
@@ -31,7 +27,18 @@ library(lmerTest)
 library(patchwork)
 library(ggtext)
 options(scipen = 999)
+
+library(patchwork)
+library(extrafont)
+library(showtext)
+showtext_auto()
+font_add_google("Playfair Display", ## name of Google font
+                "Playfair")  ## name that will be used in R
+font_add_google("Bangers", "Bangers")
+font_add_google("Schoolbell", "bell")
+font_add_google("Fredoka One", "fredoka")
 ```
+
 
 
 # Deposition

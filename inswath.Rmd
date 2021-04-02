@@ -123,46 +123,49 @@ anova(model_wi)
 #### Solution x nozzle by sprayer
 
 ```{r}
-lsmeans_wi <- emmeans(model_wi, ~ solution * nozzle | sprayer, cont="pairwise", 
+lsmeans_wi <- emmeans(model_wi, ~ solution * nozzle * sprayer, cont="pairwise", 
                       adjust="none", alpha=0.05)
 ```
 ##### Plot 
 
 ```{r}
-plot(lsmeans_wi$emmeans, ~ solution * nozzle | sprayer, comparisons=TRUE, 
+plot(lsmeans_wi$emmeans, ~ solution * nozzle * sprayer, comparisons=TRUE, 
      alpha=0.05, adjust="none") +
   labs(title = "Wisconsin (Solution x nozzle by sprayer")
 ```
 
+
 ```{r}
-wi_insw <- as_tibble(lsmeans_wi$emmeans) %>% 
+library(multcomp)
+cld_wi <- cld(lsmeans_wi$emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
+cld_wi
+```
+
+
+```{r}
+wi_insw <- as_tibble(cld_wi) %>% 
   unite("trt", c("solution", "sprayer", "nozzle"), sep = " ", remove = FALSE)
 wi_insw 
 ```
 
 ```{r}
 d <- wi_insw %>% 
-    mutate(trt = factor(trt, levels = c(
-    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
-    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
-    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
-    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
-  ))) %>% 
-  ggplot(aes(x = fct_reorder(trt, emmean), y = emmean, color = trt)) +
+  ggplot(aes(x = fct_reorder(trt, emmean), y = emmean, color = trt, label = .group)) +
   geom_point(size = 2, stroke = 1) +
   geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size = 1.5) +
   scale_color_brewer(palette = "Paired") +
   coord_flip() +
+  geom_text(nudge_y = 200) +
   geom_text(aes(x = 11.6, y = 550,
-                label = "Slight difference in dicamba \ndeposition"),
+                label = "Slight difference in spray \nparticle deposition"),
             stat = "unique", family = "bell",
             size = 4, color = "darkcyan") +
   labs(title = "Deposition inswath",
-       x = "", y = expression(paste("Solution deposition (\u03b7L/cm"^"2",")"))) +
+       x = "", y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")"))) +
   ylim(0, 1500) +
   theme_test() +
   theme(legend.position = "none",
-        plot.title = element_markdown(family = "fredoka")) 
+        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
 d
 ```
 

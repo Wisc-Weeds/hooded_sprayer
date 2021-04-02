@@ -10,16 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-```{r}
-library(patchwork)
-library(extrafont)
-library(showtext)
-font_add_google("Playfair Display", ## name of Google font
-                "Playfair")  ## name that will be used in R
-font_add_google("Bangers", "Bangers")
-font_add_google("Arial Narrow OS", "arial_narrow")
-font_add_google("Fredoka One", "fredoka")
-```
+
 
 
 

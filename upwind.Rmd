@@ -156,22 +156,28 @@ wi_up
 
 ```{r}
 e <- wi_up %>% 
-  ggplot(aes(x = fct_reorder(solution, response), y = response,
-             color = solution)) +
+  mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = fct_reorder(trt, response), y = response,
+             color = trt, label = .group)) +
   geom_point(size = 2, stroke = 1) +
   geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size = 1.5) +
   coord_flip() +
   geom_text(nudge_y = 200) +
-  scale_color_manual(values = c("red", "black")) +
-  geom_text(aes(x = 0.5, y = 0.025,
-                label = "Results averaged across nozzle and sprayer"),
+  scale_color_brewer(palette = "Paired") +
+  geom_text(aes(x = 1.5, y = 0.075,
+                label = "No difference across \ntreatments"),
             stat = "unique", family = "bell",
             size = 4, color = "darkcyan") +
   labs(title = "Deposition upwind",
-    x = "", y = expression(paste("Solution deposition (\u03b7/cm"^"2",")"))) +
-  ylim(0, 0.05) +
+    x = "", y = expression(paste("Spray particle deposition (\u03b7/cm"^"2",")"))) +
+  ylim(0, 0.1) +
   theme_test() +
    theme(legend.position = "none",
-        plot.title = element_markdown(family = "fredoka")) 
+        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
 e
 ```
