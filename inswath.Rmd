@@ -142,16 +142,28 @@ wi_insw
 
 ```{r}
 d <- wi_insw %>% 
+    mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
   ggplot(aes(x = fct_reorder(trt, emmean), y = emmean, color = trt)) +
   geom_point(size = 2, stroke = 1) +
   geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size = 1.5) +
   scale_color_brewer(palette = "Paired") +
   coord_flip() +
-  labs(title = "Inswath",
-       x = "", y = expression(paste("Solution deposition (ƞL/cm"^"2",")"))) +
+  geom_text(aes(x = 11.6, y = 550,
+                label = "Slight difference in dicamba \ndeposition"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Deposition inswath",
+       x = "", y = expression(paste("Solution deposition (\u03b7L/cm"^"2",")"))) +
   ylim(0, 1500) +
   theme_test() +
-  theme(legend.position = "none") 
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka")) 
+d
 ```
 
 

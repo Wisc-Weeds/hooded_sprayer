@@ -29,6 +29,7 @@ library(lme4)
 library(emmeans)
 library(lmerTest)
 library(patchwork)
+library(ggtext)
 options(scipen = 999)
 ```
 

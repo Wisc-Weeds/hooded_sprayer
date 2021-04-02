@@ -126,7 +126,7 @@ anova(wi_model)
 ```
 
 ```{r}
-wi_lsmeans <- emmeans(wi_model, ~ solution, cont="pairwise", type = "response",
+wi_lsmeans <- emmeans(wi_model, ~ solution*sprayer*nozzle, cont="pairwise", type = "response",
                       adjust="none", alpha=0.05)
 
 wi_lsmeans
@@ -134,16 +134,23 @@ wi_lsmeans
 
 #### Plot
 
-```{r}
-plot(wi_lsmeans$emmeans, ~ solution, comparisons=TRUE, alpha=0.05, type = "response",
+```{r warning=FALSE}
+plot(wi_lsmeans$emmeans, ~ solution*sprayer*nozzle, comparisons=TRUE, alpha=0.05, type = "response",
      adjust="none") +
  labs(title = "Wisconsin (Solution)")
 ```
 
 
 ```{r}
-wi_up <- as_tibble(wi_lsmeans$emmeans) 
+library(multcomp)
+cld_wiup <- cld(wi_lsmeans$emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
+cld_wiup
+```
 
+
+```{r}
+wi_up <- as_tibble(cld_wiup) %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ", remove = FALSE)
 wi_up 
 ```
 
@@ -154,12 +161,17 @@ e <- wi_up %>%
   geom_point(size = 2, stroke = 1) +
   geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size = 1.5) +
   coord_flip() +
+  geom_text(nudge_y = 200) +
   scale_color_manual(values = c("red", "black")) +
-  labs(title = " Upwind",
-    x = "", y = expression(paste("Solution deposition (ƞL/cm"^"2",")"))) +
+  geom_text(aes(x = 0.5, y = 0.025,
+                label = "Results averaged across nozzle and sprayer"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Deposition upwind",
+    x = "", y = expression(paste("Solution deposition (\u03b7/cm"^"2",")"))) +
   ylim(0, 0.05) +
   theme_test() +
-  theme(legend.position = "none")
-
+   theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka")) 
 e
 ```

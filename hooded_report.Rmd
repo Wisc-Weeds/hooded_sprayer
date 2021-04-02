@@ -17,14 +17,14 @@ knitr::opts_chunk$set(
   fig.align = 'center')
 ```
 
-## Deposition downwind ------------------------------------------------------
+# Deposition downwind ------------------------------------------------------
 
 ```{r}
 library(agricolae)
 ```
 
 
-### Filter deposition dataset downwind
+## Filter data
 
 ```{r}
 data_dw <- data %>% 
@@ -35,39 +35,7 @@ data_dw <- data %>%
 
 
 
-```{r}
-data_dw %>% 
-  tail()
-```
-
-
-```{r}
-auc_cal <- function(number){
-data_dw10 <- data_dw %>% 
-  filter(pass == number)  
-
-audps(data_dw10$deposition, data_dw10$distance_m, type="absolute") 
-}
-
-data_dw %>% 
-  group_by(pass) %>% 
-  nest() %>% 
-  mutate(auc = map_dbl(pass, auc_cal)) %>% 
-  ungroup(pass) %>% 
-  unnest()
-```
-
-```{r}
-data_dw %>% 
-  group_by(location, solution, sprayer, nozzle, distance_m) %>% 
-  summarise(mean_deposition = mean(deposition),
-            mean_deposition_log = log(mean_deposition)) %>% 
-  filter(distance_m == "1") %>% 
-  filter(location == "wisconsin")
-```
-
-
-### Visualize
+## Visualize
 
 ```{r}
 data_dw %>% 
@@ -78,7 +46,7 @@ data_dw %>%
 ```
 
 
-### Visualize (log scale)
+## Visualize (log scale)
 
 
 ```{r}
@@ -92,7 +60,7 @@ data_dw %>%
 # better go with log scale
 ```
 
-### Normal distribution
+## Normal distribution
 
 ```{r}
 data_dw %>% 
@@ -101,7 +69,9 @@ data_dw %>%
   facet_grid(~location)
 ```
 
-### Arrange dataset
+# Linear Model
+
+## Arrange dataset
 
 ```{r}
 data_dw1 <- data_dw %>% 
@@ -157,9 +127,7 @@ params <- data_dw2 %>%
 params
 ```
 
-```{r}
-3.240361565	-1.481574388*(4.727388)
-```
+
 
 
 ### Get confidence intervals
@@ -230,30 +198,7 @@ linear(distance_final1$Intercept, distance_final1$slope, distance_final1$distanc
 
 
 
-```{r}
-nd <- tibble(distance_m = seq(log(1:60), by = 0.1))
 
-predict(data_dw2$model[[1]], newdata = nd, re.form= NA, interval = "prediction") 
-```
-
-
-
-```{r}
-data_dw2 %>% 
-  left_join(distance_final1) %>% 
-  mutate(fit = map2_dbl(model, distance_m, ~predict))
-
-augment(data_dw2$model[[1]], 
-            new_data = distance_final1, 
-             type = "conf_int")
-```
-
-
-```{r}
-data_dw2 %>% 
-  left_join(distance_final1) %>% 
-  mutate(fit = map2(model, distance_m, predict, type = 'conf_int'))
-```
 
 
 ```{r}
@@ -290,63 +235,87 @@ downwind_final1 <- downwind_final %>%
 ```{r}
 a <- downwind_final %>% 
   filter(term == "Intercept") %>% 
-  filter(location == "wisconsin") %>% 
+  filter(location == "wisconsin") %>%
+    mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
   ggplot(aes(x = reorder(trt, estimate_exp), y = estimate_exp, color = trt)) +
   geom_point(size = 2, stroke = 1) +
   scale_color_brewer(palette = "Paired") +
   geom_linerange(aes(ymin = lower, ymax = upper), size = 1.5) +
   coord_flip() +
-  labs(title = "Intercept", 
-       y = expression(paste("Solution deposition (ƞL/cm"^"2",")")), x = "") +
-  theme_bw() +
-  theme(legend.position = "none")
+  geom_text(aes(x = 1, y = 25,
+                label = "Lower values lower deposition"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Intercept at downwind", 
+       y = expression(paste("Solution deposition (\u03b7L/cm"^"2",")")), x = "") +
+  theme_test() +
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka")) 
+a
+```
 
+
+```{r}
 b <- downwind_final %>% 
   filter(term == "slope") %>% 
   filter(location == "wisconsin") %>% 
-  ggplot(aes(x = reorder(trt, estimate_exp), y = estimate_exp, color = trt)) +
+  mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = trt, y = estimate_exp, color = trt)) +
   geom_point(size = 2, stroke = 1) +
   scale_color_brewer(palette = "Paired") +
   geom_linerange(aes(ymin = -lower, ymax = -upper), size = 1.5) +
   coord_flip() +
-  labs(title = "Slope", 
-       y = expression(paste("Solution deposition (ƞL/cm"^"2",")")), x = "") +
-  theme_bw() +
-  theme(legend.position = "none")
+  geom_text(aes(x = 12, y = -0.43,
+                label = "Higher values lower deposition rate"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Slope at downwind", 
+       y = expression(paste("Solution deposition (\u03b7L/cm"^"2",")")), x = "") +
+  theme_test() +
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka")) 
+b
+```
 
+
+```{r}
 c <- distance_final1 %>% 
   filter(location == "wisconsin") %>% 
+    mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
   ggplot(aes(x = reorder(trt, distance_m), 
              y = distance_m,
              label = distance_m, fill = trt)) +
   geom_bar(stat = "identity") +
   coord_flip() +
   scale_fill_brewer(palette = "Paired") +
-  labs(title = "0 deposition", 
-       y = "distance (m)", x = "") +
+  geom_text(aes(x = 2, y = 80,
+                label = "Distance where dicamba \nreached 0 deposition"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Predicted downwind distance", 
+       y = "Distance (m)", x = "") +
 #  geom_label(aes(label = distance_0)) +
   ylim(0,115) +
-  theme_bw() +
-  theme(legend.position = "none")
+  theme_test() +
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka")) 
+c
 ```
-
-
-```{r}
-library(patchwork)
-
-p <- (d | e) / (a | b) / (c)
-  ggsave("wisconsin.png", p)
-
-```
-
-
-
-
-
-
-
-
-
 
 
 
@@ -364,15 +333,15 @@ data_dw2$model
 
 ```{r}
 distance_final1 %>% 
-  ggplot(aes(x = fct_reorder(trt, distance_0), 
-             y = distance_0,
-             label = distance_0)) +
+  ggplot(aes(x = fct_reorder(trt, distance_m), 
+             y = distance_m,
+             label = distance_m)) +
   geom_bar(stat = "identity") +
   coord_flip() +
   scale_color_brewer(palette = "Paired") +
   labs(title = "Estimated distance where no herbicide solution deposition is predicted", 
        y = "distance (m)", x = "") +
-  geom_label(aes(label = distance_0)) +
+  geom_label(aes(label = round(distance_m, 0))) +
   ylim(0,115) +
   facet_grid(~ location) +
   theme_bw() +
@@ -383,70 +352,153 @@ distance_final1 %>%
 
 
 
+# AUC
+
 
 ```{r}
-downwind_final %>% 
-  filter(location == "wisconsin" & term == "log(distance_m)") %>% 
-  ggplot(aes(x = fct_reorder(trt, estimate_exp), y = estimate_exp)) +
-  geom_point() +
-  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
-   coord_flip() +
-  scale_color_brewer(palette = "Paired") +
-  labs(y = expression(paste("Estimates (ƞL/cm"^"2",")")), x = "") +
-  theme_bw() +
-  theme(legend.position = "none") 
+id_df <- data_dw %>% 
+  distinct(pass, block, location) %>% 
+  ungroup() %>% 
+  mutate(id = as_factor(dplyr::row_number()))
 ```
-
-
-
-
-
-
-
-### Final downwind dataset 
 
 ```{r}
-downwind_final %>% 
-  DT::datatable()
+id_df1 <- data_dw %>% 
+  left_join(id_df) 
 ```
 
 
-# Weather ----------------------------------------------------------------------
+```{r}
+auc_cal <- function(number){
+  df <- id_df1 %>% 
+    filter(id == number)  
+  
+  audps(df$deposition, df$distance_m, type="absolute") 
+}
 
-## Read weather dataset
-
-```{r message=FALSE}
-data_path <- "./data/weather"   
-files <- dir(data_path, pattern = '*.xlsx') 
-
-weather_data <- files %>%
-  map(~ readxl::read_excel(file.path(data_path, .)))
-
-weather_mo <- weather_data[[1]] %>% 
-  janitor::row_to_names(row_number = 1)
-
-
-weather_ne <- weather_data[[2]] %>% 
-  janitor::row_to_names(row_number = 1)
-
-
-weather_wi <- weather_data[[3]] %>% 
-  janitor::row_to_names(row_number = 1)
+auc_data <- id_df1 %>% 
+  group_by(id) %>% 
+  nest() %>% 
+  mutate(auc = map_dbl(id, auc_cal)) %>% 
+  ungroup(id) %>% 
+  unnest() 
 ```
 
-## Tidy weather dataset
+```{r}
+auc_data1 <- auc_data %>% 
+  filter(distance_m == 1)
+```
 
-```{r message=FALSE}
-weather <- weather_mo %>% 
-  bind_rows(weather_ne) %>% 
-  bind_rows(weather_wi) %>% 
-  janitor::clean_names() %>% 
-  mutate(date = lubridate::mdy_hms(date)) %>% 
-  mutate_at(vars(pass:wind_speed_average_19), funs(as.double),
-            vars(pass:wind_speed_average_19), funs(round(.,5))) %>% 
-  rename_at(vars(wind_direction_max_9:wind_speed_average_13), paste0, "_voltage") %>% 
-  rename_at(vars(wind_direction_min_14:wind_direction_average_16), paste0, "_degress") %>% 
-  rename_at(vars(wind_speed_min_17:wind_speed_average_19), paste0, "_mph") %>% 
-  filter(!is.na(pass))
+
+
+```{r}
+auc_data1 %>% 
+  ggplot(aes(x = log(auc))) + 
+  geom_histogram() + 
+  facet_grid(~ location)
+```
+
+
+```{r}
+auc_data2 <- auc_data1 %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ") %>% 
+  nest(-location)
+```
+
+
+```{r}
+auc_model <- function(df) {
+  lmer(log(auc) ~ trt + (1|block), data=df)
+}
+```
+
+
+```{r}
+auc_data3 <- auc_data2 %>% 
+  mutate(model = map(data, auc_model),
+         anova = map(model, anova))
+```
+
+
+```{r}
+auc_data3 %>% 
+  unnest(anova)
+```
+
+```{r emmeans_function}
+auc_data4 <- auc_data3 %>% 
+  mutate(
+    emmeans = pmap(
+      .l = list(
+        object = model, 
+        specs = "trt",
+        type= "response",
+#        cont="pairwise", 
+        adjust="none"
+      ),
+      .f = emmeans
+    )
+  ) 
+```
+
+
+```{r lsmeans}
+# full data frame with all means and CIs 
+auc_data4 %>% 
+  mutate(emm2 = map(emmeans, data.frame)) %>% 
+  unnest(emm2)
+#You can filter and make a data frame for each population and dat
+```
+
+
+```{r cld-function}
+cld_function <- function(emmeans) {
+  if(requireNamespace("multcomp")) {
+    multcomp::cld(emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
+}
+}
+```
+
+
+```{r cld}
+auc_data5 <- auc_data4 %>% 
+  mutate(cld = map(emmeans, cld_function))
+```
+
+
+```{r}
+# here is similar to emmeans but you have letters
+auc_data6 <- auc_data5 %>% 
+  unnest(cld)
+# You can also filter and make specific data frames
+```
+
+
+```{r}
+auc_wi <- auc_data6 %>% 
+  filter(location == "wisconsin") %>% 
+    mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+ggplot(aes(x=reorder(trt, response), 
+               y=response, color=trt)) + 
+  geom_point(size = 2, stroke = 1) +
+#  ylim(0,100) +
+ scale_color_brewer(palette = "Paired") +
+  theme_test() + 
+  geom_text(aes(x = 1.5, y = 90,
+                label = "Lower values less dicamba deposition \nfrom 1 to 60 m"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Area under the curve at downwind",
+       y= "Area under the curve", x="") +
+  geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size=1.5) + 
+  coord_flip() +
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka")) 
+auc_wi
 ```
 
