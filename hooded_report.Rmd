@@ -19,9 +19,6 @@ knitr::opts_chunk$set(
 
 # Deposition downwind ------------------------------------------------------
 
-```{r}
-library(agricolae)
-```
 
 
 ## Filter data
@@ -105,6 +102,35 @@ wi <- data_dw2 %>%
 ```
 
 
+
+
+
+```{r}
+# Predict 110 and 220
+new_points <- expand.grid(`log(distance_m)` = c(3.512381, 4.205528))
+new_points
+```
+
+3.512381
+```{r warning = FALSE}
+#Getting predited values
+dat <- data.frame(distance_m = seq(0, 100, 2))
+mean_pred <- predict(wi$model[[3]], ype_pred = c( "link")) 
+
+mean_pred
+```
+
+
+```{r}
+#Getting conf intervals
+conf_int_pred <- predict(lm_fit, 
+                         new_data = new_points, 
+                         type = "conf_int")
+conf_int_pred
+```
+
+
+
 ### Get parameters from models
 
 ```{r}
@@ -184,7 +210,18 @@ distance_final1 <- distance_final %>%
          distance_m = round(distance_m, 10)) 
 ```
 
+
+
+
+
 ## Predict
+
+```{r}
+downwind_final1 <- downwind_final %>% 
+  pivot_wider(id_cols = location:nozzle,
+              names_from = term, 
+              values_from = estimate_exp) 
+```
 
 
 ```{r}
@@ -201,35 +238,13 @@ linear(distance_final1$Intercept, distance_final1$slope, distance_final1$distanc
 
 
 
-```{r}
-distance_final %>% 
-  mutate(distance = tibble(list(0:130))) 
-```
 
 
 
-### Figure 
-
-```{r fig.height=8, fig.width==6} 
-downwind_final %>%
-  ggplot(aes(x = trt, y = estimate_exp, color = trt)) +
-  geom_point() +
-  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
-  facet_grid(location ~ term, scales = "free") +
-  coord_flip() + 
-  scale_color_brewer(palette = "Paired") + 
-  labs(y = expression(paste("Estimates (ƞL/cm"^"2",")")), x = "") + 
-  theme_bw() + 
-  theme(legend.position = "none") 
-``` 
 
 
-```{r}
-downwind_final1 <- downwind_final %>% 
-  pivot_wider(id_cols = location:nozzle,
-              names_from = term, 
-              values_from = estimate_exp) 
-```
+
+
 
 
 ```{r}
@@ -320,7 +335,11 @@ c <- distance_final1 %>%
 c
 ```
 
+Distance at 110 ft (33.528m)
 
+```{r}
+
+```
 
 
 
