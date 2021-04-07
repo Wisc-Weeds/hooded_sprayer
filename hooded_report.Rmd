@@ -111,7 +111,7 @@ new_points <- expand.grid(`log(distance_m)` = c(3.512381, 4.205528))
 new_points
 ```
 
-3.512381
+
 ```{r warning = FALSE}
 #Getting predited values
 dat <- data.frame(distance_m = seq(0, 100, 2))
