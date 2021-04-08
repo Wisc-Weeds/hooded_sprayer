@@ -70,6 +70,7 @@ data_dw %>%
 
 ## Arrange dataset
 
+
 ```{r}
 data_dw1 <- data_dw %>% 
   group_by(location, solution, sprayer, nozzle) %>% 
@@ -83,7 +84,7 @@ data_dw1
 ```{r}
 model <- function(df){
   lmer(log(deposition) ~ log(distance_m) + 
-         (1|block), REML = FALSE, data = df)
+         (1|block), REML = TRUE, data = df)
 }
 ```
 
@@ -106,18 +107,69 @@ wi <- data_dw2 %>%
 
 
 ```{r}
-# Predict 110 and 220
-new_points <- expand.grid(`log(distance_m)` = c(3.512381, 4.205528))
-new_points
+coef(wi$model[[3]])
 ```
 
 
 ```{r warning = FALSE}
 #Getting predited values
-dat <- data.frame(distance_m = seq(0, 100, 2))
-mean_pred <- predict(wi$model[[3]], ype_pred = c( "link")) 
+dat <- expand.grid(distance_m = exp(seq(log(0.5), log(150), length = 151)))
+mean_pred <-  exp(lme4:::predict.merMod(wi$model[[3]], dat, 
+                                        re.form = NA))
 
-mean_pred
+mean_pred1 <- mean_pred %>% 
+  as_tibble() %>% 
+  bind_cols(dat) %>% 
+  rename(deposition = value)
+mean_pred1
+```
+
+
+```{r}
+ggplot(mfx) + aes(x = breaks, y = fit_block, group = case) +
+  geom_line() +
+  facet_wrap(~term)
+```
+
+
+
+
+```{r warning = FALSE}
+(
+  PI <- exp(predictInterval(merMod = wi$model[[3]], newdata = data_dw %>% 
+                      filter(location == "wisconsin" & solution == "Intact" & 
+                               sprayer == "Open", nozzle == "TTI"),
+                        level = 0.95, n.sims = 1000,
+                        which = "fixed",
+                        ignore.fixed.terms = 1, 
+                        stat = "median", type="linear.prediction",
+                        fix.intercept.variance = FALSE,
+                        include.resid.var = FALSE))
+)
+```
+
+
+
+```{r}
+  ggplot(aes(x=1:81, y=fit, ymin=lwr, ymax=upr), data=PI[1:81,]) +
+  geom_point() +
+  geom_linerange() +
+  labs(x="Index", y="Prediction w/ 95% PI") + theme_bw()
+```
+
+
+
+```{r}
+mean_pred1  %>% 
+ggplot(aes(x = distance_m, y = deposition)) +
+  geom_point() +
+#  scale_y_log10() +
+#  scale_x_log10() +
+  geom_line() +
+#  geom_abline(intercept = 1.716, slope = -1.380) +
+#  geom_smooth(aes(y = mean_pred, size=1)) +
+  geom_vline(xintercept = 33.528) +
+  geom_hline(yintercept = 0.04)
 ```
 
 
@@ -200,7 +252,7 @@ distance_final <- downwind_final %>%
 
 
 ```{r}
-distance_function <- function(int, slope, y = 0) {
+distance_function <- function(int, slope, y = -2.302585) {
   distance = (y - int) / slope
   return(distance)
 }
@@ -338,8 +390,76 @@ c
 Distance at 110 ft (33.528m)
 
 ```{r}
-
+fig <- data_dw2 %>% 
+  dplyr::select(solution, sprayer, nozzle, location, model)
 ```
+
+
+
+
+
+```{r warning=FALSE}
+fig_model <- function(model){
+  ggpredict(model, terms = "distance_m", back.transform = TRUE) %>% 
+    as_tibble()
+}
+
+fig1 <- fig %>% 
+  mutate(estimates = map(model, fig_model)) %>% 
+  unnest(estimates) %>% 
+  rename(distance_m = x) %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ") %>% 
+  mutate_if(is_character, as_factor)
+```
+
+```{r}
+fig1 %>% 
+  filter(location == "wisconsin") %>% 
+  mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = distance_m, y = predicted, color = trt, fill = trt)) +
+  scale_color_brewer(palette = "Paired") +
+  scale_fill_brewer(palette = "Paired") +
+  geom_line(fill = NA) +
+  geom_point(alpha = 0.5) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), 
+              alpha = 0.3, color = NA) +
+#  geom_segment(aes(x = 33.5, y = 0, xend = 33.5, yend = 15)) +
+  facet_wrap(~ trt, scales = "free") +
+  theme_bw() +
+#  scale_y_log10() +
+#  scale_x_log10() +
+  theme(legend.position = "none") +
+  labs(x = "Distance (m)", 
+       y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")"))) +
+  ggsave("test.png")
+```
+
+
+```{r}
+plot(pr) +
+  labs(title = "PR1", x = "Distance (m)") +
+  plot(pr1) +
+  labs(title = "PR2", x = "Distance (m)")
+```
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
