@@ -162,8 +162,8 @@ d <- wi_insw %>%
   scale_color_brewer(palette = "Paired") +
   coord_flip() +
   geom_text(nudge_y = 200) +
-  geom_text(aes(x = 11.6, y = 550,
-                label = "Slight difference in spray \nparticle deposition"),
+  geom_text(aes(x = 10, y = 550,
+                label = "Slight difference\n in spray \nparticle \ndeposition"),
             stat = "unique", family = "bell",
             size = 4, color = "darkcyan") +
   labs(title = "Deposition inswath",
@@ -171,7 +171,9 @@ d <- wi_insw %>%
   ylim(0, 1500) +
   theme_test() +
   theme(legend.position = "none",
-        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
+        axis.text = element_markdown(size = 8),
+        axis.title = element_markdown(size = 8),
+        plot.title = element_markdown(family = "fredoka", size = 7, color = "#282728")) 
 d
 ```
 

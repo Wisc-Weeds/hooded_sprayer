@@ -125,61 +125,10 @@ mean_pred1
 ```
 
 
-```{r}
-ggplot(mfx) + aes(x = breaks, y = fit_block, group = case) +
-  geom_line() +
-  facet_wrap(~term)
-```
 
 
 
 
-```{r warning = FALSE}
-(
-  PI <- exp(predictInterval(merMod = wi$model[[3]], newdata = data_dw %>% 
-                      filter(location == "wisconsin" & solution == "Intact" & 
-                               sprayer == "Open", nozzle == "TTI"),
-                        level = 0.95, n.sims = 1000,
-                        which = "fixed",
-                        ignore.fixed.terms = 1, 
-                        stat = "median", type="linear.prediction",
-                        fix.intercept.variance = FALSE,
-                        include.resid.var = FALSE))
-)
-```
-
-
-
-```{r}
-  ggplot(aes(x=1:81, y=fit, ymin=lwr, ymax=upr), data=PI[1:81,]) +
-  geom_point() +
-  geom_linerange() +
-  labs(x="Index", y="Prediction w/ 95% PI") + theme_bw()
-```
-
-
-
-```{r}
-mean_pred1  %>% 
-ggplot(aes(x = distance_m, y = deposition)) +
-  geom_point() +
-#  scale_y_log10() +
-#  scale_x_log10() +
-  geom_line() +
-#  geom_abline(intercept = 1.716, slope = -1.380) +
-#  geom_smooth(aes(y = mean_pred, size=1)) +
-  geom_vline(xintercept = 33.528) +
-  geom_hline(yintercept = 0.04)
-```
-
-
-```{r}
-#Getting conf intervals
-conf_int_pred <- predict(lm_fit, 
-                         new_data = new_points, 
-                         type = "conf_int")
-conf_int_pred
-```
 
 
 
@@ -252,14 +201,15 @@ distance_final <- downwind_final %>%
 
 
 ```{r}
-distance_function <- function(int, slope, y = -2.302585) {
+distance_function <- function(int, slope, y = 0) {
   distance = (y - int) / slope
   return(distance)
 }
 
 distance_final1 <- distance_final %>% 
   mutate(distance_m = map2_dbl(Intercept, slope, distance_function),
-         distance_m = round(distance_m, 10)) 
+         distance_m = round(distance_m, 10)) %>% 
+  mutate( y = Intercept + slope * distance_m)
 ```
 
 
@@ -367,12 +317,12 @@ c <- distance_final1 %>%
   ggplot(aes(x = reorder(trt, distance_m), 
              y = distance_m,
              label = distance_m, fill = trt)) +
-  geom_bar(stat = "identity") +
+  geom_bar(stat = "identity", width = 0.7) +
   coord_flip() +
-  geom_label(aes(label = round(distance_m, 0))) +
+  geom_label(aes(label = round(distance_m, 0)), size = 3) +
   scale_fill_brewer(palette = "Paired") +
-  geom_text(aes(x = 1, y = 70),
-                label = expression(paste("Distance where spray \nparticle deposition reached 0 nL/cm"^"2"," ")),
+  geom_text(aes(x = 4, y = 70),
+                label = "Distance where \nno spray \nparticle \ndeposition \nwas detected",
             stat = "unique", family = "bell",
             size = 4, color = "darkcyan") +
   labs(title = "Predicted downwind distance (m)", 
@@ -381,8 +331,9 @@ c <- distance_final1 %>%
   ylim(0,115) +
   theme_test() +
   theme(legend.position = "none",
-        plot.title = element_markdown(family = "fredoka", color = "#282728"),
+        plot.title = element_markdown(family = "fredoka", size = 7.5, color = "#282728"),
         axis.text.x = element_blank(),
+        axis.text = element_markdown(size = 8),
         axis.ticks.x = element_blank())
 c
 ```
@@ -398,7 +349,7 @@ fig <- data_dw2 %>%
 
 
 
-```{r warning=FALSE}
+```{r warning=FALSE, message = FALSE}
 fig_model <- function(model){
   ggpredict(model, terms = "distance_m", back.transform = TRUE) %>% 
     as_tibble()
@@ -409,11 +360,24 @@ fig1 <- fig %>%
   unnest(estimates) %>% 
   rename(distance_m = x) %>% 
   unite("trt", c("solution", "sprayer", "nozzle"), sep = " ") %>% 
-  mutate_if(is_character, as_factor)
+  mutate_if(is_character, as_factor) 
 ```
 
 ```{r}
-fig1 %>% 
+label <- distance_final %>% 
+  mutate(y = "y = ",
+         x = "x") %>% 
+  unite("formula", c("y", "Intercept", "slope"), sep = " ") %>% 
+  unite("formula", c("formula", "x"), sep = "")
+```
+```{r}
+fig2 <- fig1 %>% 
+  left_join(label)
+```
+ 
+
+```{r}
+figs <- fig2 %>% 
   filter(location == "wisconsin") %>% 
   mutate(trt = factor(trt, levels = c(
     "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
@@ -421,7 +385,7 @@ fig1 %>%
     "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
     "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
   ))) %>% 
-  ggplot(aes(x = distance_m, y = predicted, color = trt, fill = trt)) +
+  ggplot(aes(x = distance_m, y = predicted, color = trt, fill = trt, label = formula)) +
   scale_color_brewer(palette = "Paired") +
   scale_fill_brewer(palette = "Paired") +
   geom_line(fill = NA) +
@@ -429,13 +393,15 @@ fig1 %>%
   geom_ribbon(aes(ymin = conf.low, ymax = conf.high), 
               alpha = 0.3, color = NA) +
 #  geom_segment(aes(x = 33.5, y = 0, xend = 33.5, yend = 15)) +
-  facet_wrap(~ trt, scales = "free") +
-  theme_bw() +
-#  scale_y_log10() +
-#  scale_x_log10() +
+  facet_wrap(~ trt, ncol = 4) +
+  theme_test() +
   theme(legend.position = "none") +
-  labs(x = "Distance (m)", 
+  geom_label(aes(label = formula), x = 30, y = 30, color = 1) +
+  labs(title = "Back-transformed linear models prediction of spray particle deposition",
+    x = "Distance (m)", 
        y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")"))) +
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka", size = 7.5, color = "#282728")) +
   ggsave("test.png")
 ```
 
@@ -445,7 +411,6 @@ plot(pr) +
   labs(title = "PR1", x = "Distance (m)") +
   plot(pr1) +
   labs(title = "PR2", x = "Distance (m)")
-```
 ```
 
 
@@ -523,7 +488,7 @@ auc_data2 <- auc_data1 %>%
 
 ```{r}
 auc_model <- function(df) {
-  lmer(log(auc) ~ solution * sprayer * nozzle + (1|block), data=df)
+  lmer(log(auc) ~ trt + (1|block), data=df)
 }
 ```
 
@@ -539,9 +504,11 @@ auc_data3 <- auc_data2 %>%
 auc_data3 %>% 
   unnest(anova)
 ```
+
 ```{r}
 auc_data3$anova[[2]]
 ```
+
 
 ```{r}
 emm_wi <- emmeans(auc_data3$model[[2]], ~ solution * sprayer, cont="pairwise", 
@@ -579,19 +546,21 @@ ggplot(aes(x=reorder(trt, response),
   ylim(0,75) +
  scale_color_brewer(palette = "Paired") +
   theme_test() + 
+  geom_text(nudge_y = c(23, 20, 10, 10)) +
   geom_text(aes(x = 3.5, y = 20,
                 label = "Lower values \nless spray particle \ndeposition \nfrom 1 to 60 m"),
             stat = "unique", family = "bell",
             size = 4, color = "darkcyan") +
   labs(title = "Area under the curve at downwind",
        y= "", x="") +
-  annotate(geom = "table", x = 1.7, y = 20, color = "#282728",
-           label = list(wis_cld_noz), 
-           vjust = 1, hjust = 0) +
+  annotate(geom = "table", x = 1.8, y = 20, color = "#282728",
+            label = list(wis_cld_noz), 
+            vjust = 1, hjust = 0) +
   geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size=1.5) + 
   coord_flip() +
   theme(legend.position = "none",
-        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
+        axis.text = element_markdown(size = 8),
+        plot.title = element_markdown(family = "fredoka", size = 7, color = "#282728")) 
   auc_wi 
 ```
 
@@ -617,23 +586,24 @@ ggplot(aes(x=reorder(nozzle, response),
 auc_wi_noz
 ```
 
-```{r emmeans_function, eval=FALSE, include=FALSE}
+```{r}
 auc_data4 <- auc_data3 %>% 
   mutate(
     emmeans = pmap(
       .l = list(
         object = model, 
-        specs = "solution * sprayer",
+        specs = "trt",
         type= "response",
 #        cont="pairwise", 
         adjust="none"
       ),
       .f = emmeans
     )
-  ) 
+  )
+```
 
 
-
+```{r}
 # full data frame with all means and CIs 
 auc_data4 %>% 
   mutate(emm2 = map(emmeans, data.frame)) %>% 
@@ -645,16 +615,25 @@ cld_function <- function(emmeans) {
     multcomp::cld(emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
 }
 }
+```
 
+
+```{r}
 auc_data5 <- auc_data4 %>% 
   mutate(cld = map(emmeans, cld_function))
+```
 
+
+```{r}
 # here is similar to emmeans but you have letters
 auc_data6 <- auc_data5 %>% 
   unnest(cld) %>% 
   mutate(label_at = upper.CL - response + 15)
 # You can also filter and make specific data frames
+```
 
+
+```{r}
 auc_wi <- auc_data6 %>% 
   filter(location == "wisconsin") %>% 
     mutate(trt = factor(trt, levels = c(
@@ -668,11 +647,11 @@ ggplot(aes(x=reorder(trt, response),
   geom_point(size = 2, stroke = 1) +
 #  ylim(0,100) +
  scale_color_brewer(palette = "Paired") +
-  geom_text(nudge_y = c(66.0, 60.2, 53.6, 36.8, 34.4, 28.3,  
-                        19.1, 17.5, 11.6, 7.1, 3.8, 3.1)) +
+  geom_text(nudge_y = c(75, 70, 65, 42, 40, 30,  
+                        19.1, 17.5, 11.6, 7.1, 3, 2.5)) +
   theme_test() + 
-  geom_text(aes(x = 1.5, y = 100,
-                label = "Lower values less spray \nparticle deposition from 1 to 60 m"),
+  geom_text(aes(x = 4, y = 120,
+                label = "Lower values\nless spray \nparticle\n deposition\n from 1 to 60 m"),
             stat = "unique", family = "bell",
             size = 4, color = "darkcyan") +
   labs(title = "Area under the curve at downwind",
@@ -680,7 +659,8 @@ ggplot(aes(x=reorder(trt, response),
   geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size=1.5) + 
   coord_flip() +
   theme(legend.position = "none",
-        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
+        axis.text = element_markdown(size = 8),
+        plot.title = element_markdown(family = "fredoka", size = 7, color = "#282728")) 
 auc_wi
 ```
 

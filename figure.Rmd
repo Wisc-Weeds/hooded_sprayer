@@ -23,13 +23,32 @@ wisconsin <- "#C5050C"
 
 theme_style <- theme(legend.position = "bottom",
                      plot.background = element_rect(fill = background, color = NA),
-                     text = element_text(family = "Arial Black", color = title),
-                     plot.subtitle = element_markdown(size = 10, hjust = 0,
+                     text = element_markdown(family = "Arial Black", color = title),
+                     plot.subtitle = element_markdown(size = 7, hjust = 0,
                                                   color = title),
-                     plot.caption = element_text(size = 7, family = "lobster"))
+                     plot.caption = element_markdown(size = 4, family = "lobster"))
 
 
 theme_set(theme_style)
+```
+
+
+
+
+```{r}
+patch <- d | auc_wi | c
+
+f <- patch / figs +
+   plot_layout(heights =  c(1, 3)) +
+  plot_annotation(title = "Spray particle deposition study in <b style='color:#C5050C;'>Wisconsin</b>",
+                  caption = 'University of Wisconsin-Madison | @maxwelco',
+                  theme = theme(plot.title = element_markdown(size = 20, margin = margin(3, 0, 3, 0),
+                                                          family = "fredoka"))) &
+  theme(plot.background = element_rect(fill = "#FFFFFF", color = NA),
+        panel.background = element_rect(fill = "#F5F5F5", color = NA)) &
+  plot_layout(guides = "collect")
+
+ggsave("wisconsin.pdf", f, width = 9, height = 12)
 ```
 
 
@@ -48,7 +67,7 @@ p <- (e | d) / (a | b) / (auc_wi | c) +
   plot_layout(guides = "collect")
 
 
-  ggsave("wisconsin.pdf", p, width = 9, height = 12)
+  ggsave("wisconsin2.pdf", p, width = 9, height = 12)
 ```
 
 
