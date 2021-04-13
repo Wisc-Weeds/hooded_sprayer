@@ -317,24 +317,24 @@ c <- distance_final1 %>%
   ggplot(aes(x = reorder(trt, distance_m), 
              y = distance_m,
              label = distance_m, fill = trt)) +
-  geom_bar(stat = "identity", width = 0.7) +
+  geom_bar(stat = "identity", width = 0.8) +
   coord_flip() +
   geom_label(aes(label = round(distance_m, 0)), size = 3) +
   scale_fill_brewer(palette = "Paired") +
-  geom_text(aes(x = 4, y = 70),
-                label = "Distance where \nno spray \nparticle \ndeposition \nwas detected",
-            stat = "unique", family = "bell",
-            size = 4, color = "darkcyan") +
   labs(title = "Predicted downwind distance (m)", 
        y = "", x = "") +
 #  geom_label(aes(label = distance_0)) +
   ylim(0,115) +
   theme_test() +
   theme(legend.position = "none",
-        plot.title = element_markdown(family = "fredoka", size = 7.5, color = "#282728"),
+        plot.title = element_markdown(family = "fredoka", size = 12, color = "#282728"),
         axis.text.x = element_blank(),
         axis.text = element_markdown(size = 8),
-        axis.ticks.x = element_blank())
+        axis.ticks.x = element_blank()) +
+   geom_text(x = 4, y = 70,
+                label = "Distance where \nno spray \nparticle \ndeposition \nwas detected",
+            stat = "unique", family = "flower",
+            size = 4, color = "darkcyan") 
 c
 ```
 
@@ -365,11 +365,15 @@ fig1 <- fig %>%
 
 ```{r}
 label <- distance_final %>% 
+  mutate(Intercept = round(Intercept, 1),
+         slope = round(slope, 2)) %>% 
   mutate(y = "y = ",
          x = "x") %>% 
   unite("formula", c("y", "Intercept", "slope"), sep = " ") %>% 
   unite("formula", c("formula", "x"), sep = "")
 ```
+
+
 ```{r}
 fig2 <- fig1 %>% 
   left_join(label)
@@ -395,23 +399,28 @@ figs <- fig2 %>%
 #  geom_segment(aes(x = 33.5, y = 0, xend = 33.5, yend = 15)) +
   facet_wrap(~ trt, ncol = 4) +
   theme_test() +
+#  background_grid() +
   theme(legend.position = "none") +
   geom_label(aes(label = formula), x = 30, y = 30, color = 1) +
   labs(title = "Back-transformed linear models prediction of spray particle deposition",
     x = "Distance (m)", 
        y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")"))) +
   theme(legend.position = "none",
-        plot.title = element_markdown(family = "fredoka", size = 7.5, color = "#282728")) +
-  ggsave("test.png")
+        strip.background = element_blank(),
+        panel.background = element_rect(fill = "#F5F5F5", color = NA),
+        plot.title = element_markdown(family = "fredoka", size = 12, color = "#282728"),
+        strip.text = element_textbox(
+          size = 12,
+          color = "white", 
+          fill = "#494949", 
+          box.color = "#282728",
+          halign = 0.5, linetype = 1, r = unit(5, "pt"), width = unit(1, "npc"),
+          padding = margin(2, 0, 1, 0), 
+          margin = margin(3, 3, 3, 3))) +
+  ggsave("linear.png")
 ```
 
 
-```{r}
-plot(pr) +
-  labs(title = "PR1", x = "Distance (m)") +
-  plot(pr1) +
-  labs(title = "PR2", x = "Distance (m)")
-```
 
 
 
@@ -468,14 +477,6 @@ auc_data1 <- auc_data %>%
   filter(distance_m == 1)
 ```
 
-
-
-```{r}
-auc_data1 %>% 
-  ggplot(aes(x = log(auc))) + 
-  geom_histogram() + 
-  facet_grid(~ location)
-```
 
 
 ```{r}
@@ -652,7 +653,7 @@ ggplot(aes(x=reorder(trt, response),
   theme_test() + 
   geom_text(aes(x = 4, y = 120,
                 label = "Lower values\nless spray \nparticle\n deposition\n from 1 to 60 m"),
-            stat = "unique", family = "bell",
+            stat = "unique", family = "flower",
             size = 4, color = "darkcyan") +
   labs(title = "Area under the curve at downwind",
        y= "", x="") +
@@ -660,7 +661,7 @@ ggplot(aes(x=reorder(trt, response),
   coord_flip() +
   theme(legend.position = "none",
         axis.text = element_markdown(size = 8),
-        plot.title = element_markdown(family = "fredoka", size = 7, color = "#282728")) 
+        plot.title = element_markdown(family = "fredoka", size = 12, color = "#282728")) 
 auc_wi
 ```
 

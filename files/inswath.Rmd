@@ -1,0 +1,42 @@
+---
+title: "inswath"
+author: "Maxwel Coura Oliveira"
+date: "3/29/2021"
+output: html_document
+---
+
+
+
+
+
+
+
+
+### Missouri 
+
+```{r}
+data_missou <- inswath %>% 
+  filter(location == "missouri")
+
+#missou model has no solution levels
+model_mo <- lmer(deposition ~ sprayer * nozzle + (1|block), 
+              REML = FALSE, data = data_missou)
+
+#anova
+anova(model_mo)
+```
+
+#### Sprayer
+
+```{r}
+lsmeans_mo <- emmeans(model_mo, ~ sprayer, cont="pairwise", adjust="none", alpha=0.05)
+
+lsmeans_mo
+```
+
+##### Plot
+
+```{r}
+plot(lsmeans_mo$emmeans, ~ herbicide, comparisons=TRUE, alpha=0.05, adjust="none") +
+ labs(title = "Missouri (sprayer)")
+```

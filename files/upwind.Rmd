@@ -167,7 +167,7 @@ e <- wi_up %>%
   geom_point(size = 2, stroke = 1) +
   geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size = 1.5) +
   coord_flip() +
-  geom_text(nudge_y = 200) +
+  geom_text(nudge_y = 1) +
   scale_color_brewer(palette = "Paired") +
   geom_text(aes(x = 1.5, y = 0.075,
                 label = "No difference across \ntreatments"),

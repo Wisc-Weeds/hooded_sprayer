@@ -1,0 +1,228 @@
+---
+title: "weather"
+author: "Maxwel Coura Oliveira"
+date: "4/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE, waring=F}
+library(tidyverse)
+library(RColorBrewer)
+library(CircStats)
+library(openair)
+library(scales)
+```
+
+
+# Weather ----------------------------------------------------------------------
+
+## Read weather dataset
+
+```{r message=FALSE}
+data_path <- "./data/weather"   
+files <- dir(data_path, pattern = '*.xlsx') 
+
+weather_data <- files %>%
+  map(~ readxl::read_excel(file.path(data_path, .)))
+
+weather_mo <- weather_data[[1]] %>% 
+  janitor::row_to_names(row_number = 1) %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(-8:-13) %>% 
+  mutate(location = "missouri")
+  
+weather_ne <- weather_data[[2]] %>% 
+  janitor::row_to_names(row_number = 1) %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(-8:-13) %>% 
+  mutate(location = "nebraska")
+
+
+weather_wi <- weather_data[[3]] %>% 
+  janitor::row_to_names(row_number = 1) %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(-8:-13) %>% 
+  mutate(location = "wisconsin")
+```
+
+
+
+## Tidy weather dataset
+
+```{r message=FALSE}
+weather <- weather_mo %>% 
+  bind_rows(weather_ne) %>% 
+  bind_rows(weather_wi) %>% 
+  rename(wind_dir_min = wind_direction_min_2, 
+         wind_dir_max = wind_direction_max_2,
+         wind_dir_avg = wind_direction_average_2,
+         wind_sp_min = wind_speed_min_2,
+         wind_sp_max = wind_speed_max_2,
+         wind_sp_avg = wind_speed_average_2) %>% 
+  mutate(date = lubridate::mdy_hms(date)) %>% 
+  mutate_at(vars(pass:wind_sp_avg), funs(as.double),
+            vars(pass:wind_sp_avg), funs(round(.,5))) %>% 
+#  rename_at(vars(wind_direction_max_9:wind_speed_average_13), paste0, "_voltage") %>% 
+#  rename_at(vars(wind_direction_min_14:wind_direction_average_16), paste0, "_degress") %>% 
+#  rename_at(vars(wind_speed_min_17:wind_speed_average_19), paste0, "_mph") %>% 
+  filter(!is.na(pass))
+```
+
+
+```{r}
+data <- weather %>% 
+  mutate(wind_sp_min = wind_sp_min * 0.44704,
+         wind_sp_max = wind_sp_max * 0.44704,
+         wind_sp_avg = wind_sp_avg * 0.44704) %>% 
+  rename(dir = wind_dir_avg,
+         spd = wind_sp_avg)
+```
+
+```{r}
+data %>% 
+  summarise(max(spd))
+```
+
+
+```{r Preliminar figure}
+data <- data %>% 
+  filter(location == "wisconsin")
+
+plot.windrose <- function(data,
+                          spd,
+                          dir,
+                          spdres = 2,
+                          dirres = 22.5,
+                          spdmin = 0,
+                          spdmax = 8,
+                          spdseq = NULL,
+                          palette = "OrRd",
+                          countmax = NA,
+                          debug = 0){
+  # Look to see what data was passed in to the function
+  if (is.numeric(spd) & is.numeric(dir)){
+    # assume that we've been given vectors of the speed and direction vectors
+    data <- data.frame(spd = spd,
+                       dir = dir)
+    spd = "spd"
+    dir = "dir"
+  } else if (exists("data")){
+    # Assume that we've been given a data frame, and the name of the speed 
+    # and direction columns. This is the format we want for later use.    
+  }  
+  # Tidy up input data ----
+  n.in <- NROW(data)
+  dnu <- (is.na(data[[spd]]) | is.na(data[[dir]]))
+  data[[spd]][dnu] <- NA
+  data[[dir]][dnu] <- NA
+  # figure out the wind speed bins ----
+  if (missing(spdseq)){
+    spdseq <- seq(spdmin,spdmax,spdres)
+  } else {
+    if (debug >0){
+      cat("Using custom speed bins \n")
+    }
+  }
+  # get some information about the number of bins, etc.
+  n.spd.seq <- length(spdseq)
+  n.colors.in.range <- n.spd.seq - 1
+  # create the color map
+  spd.colors <- colorRampPalette(brewer.pal(min(max(3,
+                                                    n.colors.in.range),
+                                                min(9,
+                                                    n.colors.in.range)),                                               
+                                            palette))(n.colors.in.range)
+  if (max(data[[spd]],na.rm = TRUE) > spdmax){    
+    spd.breaks <- c(spdseq,
+                    max(data[[spd]],na.rm = TRUE))
+    spd.labels <- c(paste(c(spdseq[1:n.spd.seq-1]),
+                          '-',
+                          c(spdseq[2:n.spd.seq])),
+                    paste(spdmax,
+                          "-",
+                          max(data[[spd]],na.rm = TRUE)))
+    spd.colors <- c(spd.colors, "grey50")
+  } else{
+    spd.breaks <- spdseq
+    spd.labels <- paste(c(spdseq[1:n.spd.seq-1]),
+                        '-',
+                        c(spdseq[2:n.spd.seq]))    
+  }
+  data$spd.binned <- cut(x = data[[spd]],
+                         breaks = spd.breaks,
+                         labels = spd.labels,
+                         ordered_result = TRUE)
+  # figure out the wind direction bins
+  dir.breaks <- c(-dirres/2,
+                  seq(dirres/2, 360-dirres/2, by = dirres),
+                  360+dirres/2)  
+  dir.labels <- c(paste(360-dirres/2,"-",dirres/2),
+                  paste(seq(dirres/2, 360-3*dirres/2, by = dirres),
+                        "-",
+                        seq(3*dirres/2, 360-dirres/2, by = dirres)),
+                  paste(360-dirres/2,"-",dirres/2))
+  # assign each wind direction to a bin
+  dir.binned <- cut(data[[dir]],
+                    breaks = dir.breaks,
+                    ordered_result = TRUE)
+  levels(dir.binned) <- dir.labels
+  data$dir.binned <- dir.binned
+  # Run debug if required ----
+  if (debug>0){    
+    cat(dir.breaks,"\n")
+    cat(dir.labels,"\n")
+    cat(levels(dir.binned),"\n")
+  }
+
+
+# create the plot ----
+  p.windrose <- ggplot(data = data,
+                       aes(x = dir.binned,
+                           fill = spd.binned
+                           ,y = (..count..)/sum(..count..)
+                           ))+
+    geom_bar() + 
+    scale_x_discrete(drop = FALSE,
+labels = c("N","","NE","", "E", "", "SE","", 
+             "S","", "SW","", "W","","NW","")) +
+    coord_polar(start = -((dirres/2)/360) * 2*pi) +
+    scale_fill_manual(name = "Wind <br>speed <br>(m s<sup>-1</sup>)", 
+                      values = spd.colors,
+                      drop = FALSE) +
+    theme_bw() +
+    theme(axis.title.x = element_blank(), 
+          legend.position = "right",
+          legend.title = element_markdown(size = 9),
+          legend.key.size = unit(1,"line"),
+          legend.direction = "vertical",
+          plot.title = element_markdown(family = "fredoka", size = 12, color = "#282728")) +
+    scale_y_continuous(labels = percent_format(suffix = "", accuracy = 1)) + 
+    labs(y = "Frequency (%)", title = "Wind speed and direction") 
+  # adjust axes if required
+  if (!is.na(countmax)){
+    p.windrose <- p.windrose +
+      ylim(c(0,countmax))
+  }
+  # print the plot
+  print(p.windrose)  
+  # return the handle to the wind rose
+  return(p.windrose)
+}
+```
+
+
+
+```{r Figure}
+plot <- plot.windrose(data = data,
+              spd = "spd",
+              dir = "dir") 
+wi_speed <- plot +  #facet_wrap(~location) +  
+    ggsave("WindRose_WI.png", units="in")
+```
+
+

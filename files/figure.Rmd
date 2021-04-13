@@ -16,15 +16,18 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 ```{r}
-background <- "#f5f5dc"
+background <- "white"
 text_colour <- "white"
 title <- "#1D1D1D"
 wisconsin <- "#C5050C"
 
 theme_style <- theme(legend.position = "bottom",
                      plot.background = element_rect(fill = background, color = NA),
-                     text = element_markdown(family = "Arial Black", color = title),
-                     plot.subtitle = element_markdown(size = 7, hjust = 0,
+                     legend.text = element_markdown(),
+                     plot.title = element_markdown(size = 18, margin = margin(3, 0, 3, 0),
+                                                          family = "fredoka"),
+                     plot.subtitle = element_markdown(size = 5, hjust = 0,
+                                                      family = "Roboto Condensed",
                                                   color = title),
                      plot.caption = element_markdown(size = 4, family = "lobster"))
 
@@ -33,10 +36,18 @@ theme_set(theme_style)
 ```
 
 
+```{r}
+all_wi <- (wi_speed + ins_wi) / figs / (auc_wi | c) +
+   plot_layout(heights =  c(1, 2, 1)) +
+  plot_annotation(title = "<b style='color:#C5050C;'>Wisconsin</b>")
+
+ggsave("wisconsin_3.pdf", all_wi, width = 9, height = 12)
+```
+
 
 
 ```{r}
-patch <- d | auc_wi | c
+patch <- ins_wi | auc_wi | c
 
 f <- patch / figs +
    plot_layout(heights =  c(1, 3)) +
@@ -56,7 +67,7 @@ ggsave("wisconsin.pdf", f, width = 9, height = 12)
 
 
 ```{r}
-p <- (e | d) / (a | b) / (auc_wi | c) +
+p <- (up_wis  | ins_wi) / (a | b) / (auc_wi | c) +
   plot_annotation(title = "Spray particle deposition study in <b style='color:#C5050C;'>Wisconsin</b>",
                   subtitle = "Investigations of spray particle deposition at upwind, inswath and downwind. <b style='color:#0479a8;'>ANOVA</b> was perfomed for spray particle deposition at upwind and <br>inswath, and a <b style='color:#0479a8;'>Linear Model</b> was used to predict pray particle deposition with distance at downwind. Hooded sprayer makes a bigger <br>difference on spray particle deposition, followed by nozzle and drift reduction agent.",
                   caption = 'University of Wisconsin-Madison | @maxwelco',

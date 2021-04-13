@@ -1,0 +1,1314 @@
+---
+title: "wisconsin"
+author: "Maxwel Coura Oliveira"
+date: "4/13/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = 'center')
+```
+
+
+
+
+
+# Packages
+
+```{r message = FALSE}
+library(RColorBrewer)
+library(CircStats)
+library(openair)
+library(scales)
+library(tidyverse)
+library(lme4)
+library(emmeans)
+library(ggpmisc)
+library(lmerTest)
+library(cowplot)
+library(patchwork)
+library(ggtext)
+library(ggeffects)
+options(scipen = 999)
+library(agricolae)
+library(extrafont)
+library(showtext)
+showtext_auto()
+font_add_google("Playfair Display", ## name of Google font
+                "Playfair")  ## name that will be used in R
+font_add_google("Bangers", "Bangers")
+font_add_google("Schoolbell", "bell")
+font_add_google("Fredoka One", "fredoka")
+font_add_google("Lobster", "lobster")
+font_add_google("Indie Flower" , "flower")
+font_add_google("Roboto Condensed", "roboto")
+```
+
+
+
+# Deposition
+
+## Load deposition dataset
+
+```{r load-data}
+#missouri
+path_mo <- "./data/deposition/Deposition data_MO.xlsx"
+
+missouri <- path_mo %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_mo", "upwind_mo", "inswath_mo")) %>% 
+  map(readxl::read_excel, path = path_mo)
+
+
+
+downwind_mo <- missouri$downwind_mo %>% 
+  mutate(type = "downwind")
+upwind_mo <- missouri$upwind_mo %>% 
+  mutate('distance (m)' = NA,
+         type = "upwind")
+inswath_mo <- missouri$inswath_mo %>%
+  mutate('distance (m)' = NA,
+         type = "inswath") %>% 
+  dplyr::select(-...8)
+
+missouri <- downwind_mo %>% 
+  bind_rows(upwind_mo) %>% 
+  bind_rows(inswath_mo) %>% 
+  mutate(location = "missouri")
+
+
+#nebraska
+path_ne <- "./data/deposition/Deposition data_NE.xlsx"
+
+nebraska <- path_ne %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_ne", "upwind_ne", "inswath_ne")) %>% 
+  map(readxl::read_excel, path = path_ne)
+
+
+
+downwind_ne <- nebraska$downwind_ne %>% 
+  mutate(type = "downwind")
+upwind_ne <- nebraska$upwind_ne %>% 
+  mutate('distance (m)' = NA,
+         type = "upwind")
+inswath_ne <- nebraska$inswath_ne %>%
+  mutate('distance (m)' = NA,
+         type = "inswath")
+
+nebraska <- downwind_ne %>% 
+  bind_rows(upwind_ne) %>% 
+  bind_rows(inswath_ne) %>% 
+  mutate(location = "nebraska")
+
+
+#wisconsin
+path_wi <- "./data/deposition/Deposition data_WI.xlsx"
+
+wisconsin <- path_wi %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_wi", "upwind_wi", "inswath_wi")) %>% 
+  map(readxl::read_excel, path = path_wi)
+
+
+
+downwind_wi <- wisconsin$downwind_wi %>% 
+  mutate(type = "downwind")
+upwind_wi <- wisconsin$upwind_wi %>% 
+  mutate('distance (m)' = NA,
+         type = "upwind")
+inswath_wi <- wisconsin$inswath_wi %>%
+  mutate('distance (m)' = NA,
+         type = "inswath")
+
+wisconsin <- downwind_wi %>% 
+  bind_rows(upwind_wi) %>% 
+  bind_rows(inswath_wi) %>% 
+  mutate(location = "wisconsin")
+```
+
+### Join location datasets
+
+```{r join-data}
+data <- missouri %>% 
+  bind_rows(nebraska) %>% 
+  bind_rows(wisconsin) %>% 
+  janitor::clean_names() %>% 
+  rename(deposition = n_l_cm2) %>% 
+  mutate_if(is_character, as_factor) %>% 
+  mutate(block = as_factor(block)) %>% 
+  mutate(distance_m = replace_na(distance_m, 0)) %>% 
+  mutate(distance_log = log10(distance_m),
+         deposition_log = log10(deposition)) 
+```
+
+
+
+## Deposition inswath ------------------------------------------------------
+
+### Filter deposition dataset inswath
+
+```{r}
+inswath <-  data %>% 
+  filter(type == "inswath")
+```
+
+### Test ANOVA assumptions
+
+#### Normal distribution
+
+```{r}
+inswath %>% 
+  ggplot(aes(x = deposition)) +
+  geom_histogram()
+# data has normal distribution
+```
+
+#### Homogeneity of variances
+
+```{r}
+bartlett.test(deposition ~ location, data = inswath)
+# can't compare locations
+```
+
+
+### Data analysis
+
+#### Filter location
+
+```{r}
+# nebraska and wisconsin 
+inswath1 <- inswath %>% 
+  group_by(location) %>% 
+  nest() %>% 
+  filter(location != "missouri")
+```
+
+#### Model
+
+```{r}
+model <- function(df){
+  lmer(deposition ~ solution * sprayer * nozzle + (1|block), 
+              REML = FALSE, data = df)
+}
+```
+
+#### Fit models and ANOVA
+
+```{r}
+inswath2 <- inswath1 %>% 
+  mutate(model = map(data, model),
+         anova = map(model, anova))
+```
+
+
+
+### Nebraska
+
+```{r}
+model_ne <- inswath2$model[[1]]
+# anova
+anova(model_ne)
+```
+
+#### Solution x sprayer 
+
+```{r}
+lsmeans_ne1 <- emmeans(model_ne, ~ solution * sprayer, cont="pairwise", 
+                      adjust="none", alpha=0.05)
+
+lsmeans_ne1
+```
+
+##### Plot
+
+```{r}
+plot(lsmeans_ne1$emmeans, ~ solution * sprayer, comparisons=TRUE, 
+     alpha=0.05, adjust="none") +
+  labs(title = "Nebraska (Solution vs Sprayer)")
+```
+
+
+#### Solution x nozzle 
+
+```{r}
+lsmeans_ne2 <- emmeans(model_ne, ~ solution * nozzle, cont="pairwise", 
+                      adjust="none", alpha=0.05)
+
+lsmeans_ne2
+```
+
+##### Plot
+
+```{r}
+plot(lsmeans_ne2$emmeans, ~ solution * sprayer, comparisons=TRUE, 
+     alpha=0.05, adjust="none") +
+  labs(title = "Nebraska (Solution vs Nozzle)")
+```
+
+
+
+### Wisconsin
+
+```{r}
+model_wi <- inswath2$model[[2]]
+
+#anova
+anova(model_wi)
+```
+
+
+#### Solution x nozzle by sprayer
+
+```{r}
+lsmeans_wi <- emmeans(model_wi, ~ solution * nozzle * sprayer, cont="pairwise", 
+                      adjust="none", alpha=0.05)
+```
+##### Plot 
+
+```{r}
+plot(lsmeans_wi$emmeans, ~ solution * nozzle * sprayer, comparisons=TRUE, 
+     alpha=0.05, adjust="none") +
+  labs(title = "Wisconsin (Solution x nozzle by sprayer")
+```
+
+
+```{r}
+library(multcomp)
+cld_wi <- cld(lsmeans_wi$emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
+cld_wi
+```
+
+
+```{r}
+wi_insw <- as_tibble(cld_wi) %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ", remove = FALSE)
+wi_insw 
+```
+
+```{r}
+ins_wi <- wi_insw %>% 
+  mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = fct_reorder(trt, emmean), y = emmean, color = trt, label = .group)) +
+  geom_point(size = 2, stroke = 1) +
+  geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size = 1.5) +
+  scale_color_brewer(palette = "Paired") +
+  coord_flip() +
+  geom_text(nudge_y = 200) +
+  geom_text(aes(x = 10, y = 550,
+                label = "Slight difference\n in spray \nparticle \ndeposition"),
+            stat = "unique", family = "flower",
+            size = 4, color = "darkcyan") +
+  labs(title = "Deposition inswath",
+       x = "", y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")"))) +
+  ylim(0, 1500) +
+  theme_test() +
+  theme(legend.position = "none",
+        axis.text = element_markdown(size = 8),
+        panel.background = element_rect(fill = "#F5F5F5", color = NA),
+        axis.title = element_markdown(size = 8),
+        plot.title = element_markdown(family = "fredoka", size = 12, color = "#282728")) 
+ins_wi
+```
+
+
+
+## Deposition upwind ------------------------------------------------------
+
+### Filter deposition dataset upwind
+
+```{r}
+upwind <- data %>% 
+  filter(type == "upwind")
+```
+
+### Test ANOVA assumptions
+
+#### Normal distribution
+
+```{r}
+upwind %>% 
+  ggplot(aes(x = deposition)) +
+  geom_histogram() 
+# not normalized
+```
+
+##### Log scale
+
+```{r}
+upwind %>% 
+  ggplot(aes(x = log(deposition))) +
+  geom_histogram()
+# yes!
+```
+
+#### Homogeneity of variances
+
+```{r}
+bartlett.test(deposition ~ location, data = upwind)
+# can't compare locations
+```
+
+
+### Wisconsin
+
+#### Filter upwind Wisconsin
+
+```{r}
+wi_data <- upwind %>% 
+  filter(location == "wisconsin")
+```
+
+#### Model
+
+```{r}
+wi_model <- lmer(log(deposition) ~ solution * sprayer * nozzle + (1|block), 
+              REML = FALSE, data = wi_data)
+```
+
+#### ANOVA
+
+```{r}
+anova(wi_model)
+```
+
+```{r}
+wi_lsmeans <- emmeans(wi_model, ~ solution*sprayer*nozzle, cont="pairwise", type = "response",
+                      adjust="none", alpha=0.05)
+
+wi_lsmeans
+```
+
+#### Plot
+
+```{r warning=FALSE}
+plot(wi_lsmeans$emmeans, ~ solution*sprayer*nozzle, comparisons=TRUE, alpha=0.05, type = "response",
+     adjust="none") +
+ labs(title = "Wisconsin (Solution)")
+```
+
+
+```{r}
+library(multcomp)
+cld_wiup <- cld(wi_lsmeans$emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
+cld_wiup
+```
+
+
+```{r}
+wi_up <- as_tibble(cld_wiup) %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ", remove = FALSE)
+wi_up 
+```
+
+```{r}
+up_wis <- wi_up %>% 
+  mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = fct_reorder(trt, response), y = response,
+             color = trt, label = .group)) +
+  geom_point(size = 2, stroke = 1) +
+  geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size = 1.5) +
+  coord_flip() +
+  geom_text(nudge_y = 200) +
+  scale_color_brewer(palette = "Paired") +
+  geom_text(aes(x = 1.5, y = 0.075,
+                label = "No difference across \ntreatments"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Deposition upwind",
+    x = "", y = expression(paste("Spray particle deposition (\u03b7/cm"^"2",")"))) +
+  ylim(0, 0.1) +
+  theme_test() +
+   theme(legend.position = "none",
+         panel.background = element_rect(fill = "#F5F5F5", color = NA),
+        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
+up_wis 
+```
+
+
+
+
+# Deposition downwind ------------------------------------------------------
+
+
+
+## Filter data
+
+```{r}
+data_dw <- data %>% 
+  filter(type == "downwind") %>% 
+  mutate(pass = factor(pass)) %>% 
+  group_by(location, pass, block) 
+```
+
+
+
+## Visualize
+
+```{r}
+data_dw %>% 
+  ggplot(aes(x = distance_m, y = deposition, color = nozzle)) +
+  geom_point() +
+  facet_grid(~ location)
+# some trt have rapid decrease and some trt have linear trend
+```
+
+
+## Visualize (log scale)
+
+
+```{r}
+data_dw %>% 
+  filter(location == "wisconsin") %>% 
+#  unite("trt", c("solution", "sprayer", "nozzle")) %>% 
+  ggplot(aes(x = log(distance_m), y = log(deposition), color = nozzle)) +
+  geom_point() +
+  facet_grid(sprayer ~ solution) +
+  geom_smooth(method = "lm") 
+# better go with log scale
+```
+
+## Normal distribution
+
+```{r}
+data_dw %>% 
+  ggplot(aes(x = log(deposition))) +
+  geom_histogram() +
+  facet_grid(~location)
+```
+
+# Linear Model
+
+## Arrange dataset
+
+
+```{r}
+data_dw1 <- data_dw %>% 
+  group_by(location, solution, sprayer, nozzle) %>% 
+  nest()
+
+data_dw1
+```
+
+### Model function
+
+```{r}
+model <- function(df){
+  lmer(log(deposition) ~ log(distance_m) + 
+         (1|block), REML = TRUE, data = df)
+}
+```
+
+### Fit model and confidence intervals
+
+```{r warning=FALSE, message = FALSE}
+data_dw2 <- data_dw1 %>% 
+  mutate(model = map(data, model),
+         summary = map(model, broom.mixed::tidy),
+         confint = map(model, confint))
+```
+
+```{r}
+wi <- data_dw2 %>% 
+  filter(location == "wisconsin")
+```
+
+
+
+
+
+```{r}
+coef(wi$model[[3]])
+```
+
+
+```{r warning = FALSE}
+#Getting predited values
+dat <- expand.grid(distance_m = exp(seq(log(0.5), log(150), length = 151)))
+mean_pred <-  exp(lme4:::predict.merMod(wi$model[[3]], dat, 
+                                        re.form = NA))
+
+mean_pred1 <- mean_pred %>% 
+  as_tibble() %>% 
+  bind_cols(dat) %>% 
+  rename(deposition = value)
+mean_pred1
+```
+
+
+
+### Get parameters from models
+
+```{r}
+params <- data_dw2 %>% 
+  unnest(summary) %>% 
+  filter(effect == "fixed") %>% 
+  mutate(estimate_exp = exp(estimate),
+         estimate_exp = case_when(
+           term == "log(distance_m)" ~ -estimate_exp,
+           TRUE                      ~ estimate_exp
+         )) %>% 
+  dplyr::select(location, solution, sprayer, nozzle, term, estimate, std.error, statistic, p.value, estimate_exp) %>% 
+  mutate(p.value = round(p.value, 3)) %>% 
+  mutate(term = fct_recode(term,
+                           slope = "log(distance_m)"),
+         term = fct_recode(term,
+                           Intercept = "(Intercept)")) %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ", remove = FALSE)
+
+params
+```
+
+
+
+
+### Get confidence intervals
+
+```{r}
+get_cis <- function(number){
+  exp(data_dw2$confint[[number]]) %>%
+    as_tibble() %>%
+    slice_tail(n=2)
+} 
+
+number <- as_tibble(c(1:30))
+
+intervals <- number %>%
+  mutate(interval = map(value, get_cis)) %>%
+  unnest(interval)
+
+# join to main dataset
+downwind_final <- params %>%
+  bind_cols(intervals) %>%
+  rename(lower = `2.5 %`,
+         upper = `97.5 %`) %>%
+  mutate(lower = case_when(
+           term == "log(distance_m)" ~ -lower,
+         TRUE                        ~ lower
+         ),
+         upper = case_when(
+           term == "log(distance_m)" ~ -upper,
+         TRUE                        ~ upper,
+         )) %>% 
+  mutate(across(where(is_double), round, 3))
+```
+
+
+## Distance of deposition at 0
+
+```{r}
+distance_final <- downwind_final %>% 
+  dplyr::select(trt, term, estimate_exp) %>% 
+  pivot_wider(
+              names_from = term, 
+              values_from = estimate_exp) 
+```
+
+
+```{r}
+distance_function <- function(int, slope, y = 0) {
+  distance = (y - int) / slope
+  return(distance)
+}
+
+distance_final1 <- distance_final %>% 
+  mutate(distance_m = map2_dbl(Intercept, slope, distance_function),
+         distance_m = round(distance_m, 10)) %>% 
+  mutate( y = Intercept + slope * distance_m)
+```
+
+
+
+## Predict
+
+```{r}
+downwind_final1 <- downwind_final %>% 
+  pivot_wider(id_cols = location:nozzle,
+              names_from = term, 
+              values_from = estimate_exp) 
+```
+
+
+```{r}
+linear <- function(a, b, d) {
+  y = a + b*d
+  return(y)
+}
+
+linear(distance_final1$Intercept, distance_final1$slope, distance_final1$distance_m)
+```
+
+
+
+
+```{r}
+a <- downwind_final %>% 
+  filter(term == "Intercept") %>% 
+  filter(location == "wisconsin") %>%
+    mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = reorder(trt, estimate_exp), y = estimate_exp, color = trt)) +
+  geom_point(size = 2, stroke = 1) +
+  scale_color_brewer(palette = "Paired") +
+  geom_linerange(aes(ymin = lower, ymax = upper), size = 1.5) +
+  coord_flip() +
+  geom_text(aes(x = 1.5, y = 25,
+                label = "Lower values lower spray \nparticle deposition"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Intercept at downwind", 
+       y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")")), x = "") +
+  theme_test() +
+  theme(legend.position = "none",
+        panel.background = element_rect(fill = "#F5F5F5", color = NA),
+        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
+a
+```
+
+
+```{r}
+b <- downwind_final %>% 
+  filter(term == "slope") %>% 
+  filter(location == "wisconsin") %>% 
+  mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = trt, y = estimate_exp, color = trt)) +
+  geom_point(size = 2, stroke = 1) +
+  scale_color_brewer(palette = "Paired") +
+  geom_linerange(aes(ymin = -lower, ymax = -upper), size = 1.5) +
+  coord_flip() +
+  geom_text(aes(x = 11.6, y = -0.43,
+                label = "Higher values lower spray \nparticle deposition rate"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Slope at downwind", 
+       y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")")), x = "") +
+  theme_test() +
+  theme(legend.position = "none",
+        panel.background = element_rect(fill = "#F5F5F5", color = NA),
+        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
+b
+```
+
+
+```{r}
+c <- distance_final1 %>% 
+  filter(location == "wisconsin") %>% 
+    mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = reorder(trt, distance_m), 
+             y = distance_m,
+             label = distance_m, fill = trt)) +
+  geom_bar(stat = "identity", width = 0.8) +
+  coord_flip() +
+  geom_label(aes(label = round(distance_m, 0)), size = 3) +
+  scale_fill_brewer(palette = "Paired") +
+  labs(title = "Predicted downwind distance (m)", 
+       y = "", x = "") +
+#  geom_label(aes(label = distance_0)) +
+  ylim(0,115) +
+  theme_test() +
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka", size = 12, color = "#282728"),
+        axis.text.x = element_blank(),
+        panel.background = element_rect(fill = "#F5F5F5", color = NA),
+        axis.text = element_markdown(size = 8),
+        axis.ticks.x = element_blank()) +
+   geom_text(x = 4, y = 70,
+                label = "Distance where \nno spray \nparticle \ndeposition \nwas detected",
+            stat = "unique", family = "flower",
+            size = 4, color = "darkcyan") 
+c
+```
+
+
+```{r}
+fig <- data_dw2 %>% 
+  dplyr::select(solution, sprayer, nozzle, location, model)
+```
+
+
+```{r warning=FALSE, message = FALSE}
+fig_model <- function(model){
+  ggpredict(model, terms = "distance_m", back.transform = TRUE) %>% 
+    as_tibble()
+}
+
+fig1 <- fig %>% 
+  mutate(estimates = map(model, fig_model)) %>% 
+  unnest(estimates) %>% 
+  rename(distance_m = x) %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ") %>% 
+  mutate_if(is_character, as_factor) 
+```
+
+```{r}
+label <- distance_final %>% 
+  mutate(Intercept = round(Intercept, 1),
+         slope = round(slope, 2)) %>% 
+  mutate(y = "y = ",
+         x = "x") %>% 
+  unite("formula", c("y", "Intercept", "slope"), sep = " ") %>% 
+  unite("formula", c("formula", "x"), sep = "")
+```
+
+
+```{r}
+fig2 <- fig1 %>% 
+  left_join(label)
+```
+ 
+
+```{r}
+figs <- fig2 %>% 
+  filter(location == "wisconsin") %>% 
+  mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = distance_m, y = predicted, color = trt, fill = trt, label = formula)) +
+  scale_color_brewer(palette = "Paired") +
+  scale_fill_brewer(palette = "Paired") +
+  geom_line(fill = NA) +
+  geom_point(alpha = 0.5) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), 
+              alpha = 0.3, color = NA) +
+#  geom_segment(aes(x = 33.5, y = 0, xend = 33.5, yend = 15)) +
+  facet_wrap(~ trt, ncol = 4) +
+  theme_test() +
+#  background_grid() +
+  theme(legend.position = "none") +
+  geom_label(aes(label = formula), x = 30, y = 30, color = 1) +
+  labs(title = "Back-transformed linear models prediction of spray particle deposition",
+    x = "Distance (m)", 
+       y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")"))) +
+  theme(legend.position = "none",
+        strip.background = element_blank(),
+        panel.background = element_rect(fill = "#F5F5F5", color = NA),
+        plot.title = element_markdown(family = "fredoka", size = 12, color = "#282728"),
+        strip.text = element_textbox(
+          size = 12,
+          color = "white", 
+          fill = "#494949", 
+          box.color = "#282728",
+          halign = 0.5, linetype = 1, r = unit(5, "pt"), width = unit(1, "npc"),
+          padding = margin(2, 0, 1, 0), 
+          margin = margin(3, 3, 3, 3))) +
+  ggsave("linear.png")
+```
+
+
+
+
+
+# AUC
+
+
+```{r}
+id_df <- data_dw %>% 
+  distinct(pass, block, location) %>% 
+  ungroup() %>% 
+  mutate(id = as_factor(dplyr::row_number()))
+```
+
+```{r}
+id_df1 <- data_dw %>% 
+  left_join(id_df) 
+```
+
+
+```{r}
+auc_cal <- function(number){
+  df <- id_df1 %>% 
+    filter(id == number)  
+  
+  audps(df$deposition, df$distance_m, type="absolute") 
+}
+
+auc_data <- id_df1 %>% 
+  group_by(id) %>% 
+  nest() %>% 
+  mutate(auc = map_dbl(id, auc_cal)) %>% 
+  ungroup(id) %>% 
+  unnest() 
+```
+
+```{r}
+auc_data1 <- auc_data %>% 
+  filter(distance_m == 1)
+```
+
+
+
+```{r}
+auc_data2 <- auc_data1 %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ", remove = FALSE) %>% 
+  nest(-location) %>% 
+  filter(location != "missouri")
+```
+
+
+```{r}
+auc_model <- function(df) {
+  lmer(log(auc) ~ trt + (1|block), data=df)
+}
+```
+
+
+```{r}
+auc_data3 <- auc_data2 %>% 
+  mutate(model = map(data, auc_model),
+         anova = map(model, anova))
+```
+
+
+```{r}
+auc_data3 %>% 
+  unnest(anova)
+```
+
+```
+auc_data3$anova[[2]]
+```
+
+
+```
+emm_wi <- emmeans(auc_data3$model[[2]], ~ solution * sprayer, cont="pairwise", 
+                      adjust="none", alpha=0.05, type = "response")
+emm_wi
+
+emm_wi_noz <- emmeans(auc_data3$model[[2]], ~ nozzle, cont="pairwise", 
+                      adjust="none", alpha=0.05, type = "response")
+emm_wi_noz
+```
+
+```
+wis_cld <- as_tibble(multcomp::cld(emm_wi$emmeans, alpha=0.05, 
+                         Letters=letters, adjust="none", reversed = TRUE)) %>% 
+  unite("trt", c("solution", "sprayer"), sep = " ", remove = FALSE)
+
+wis_cld_noz <- as_tibble(multcomp::cld(emm_wi_noz$emmeans, alpha=0.05, 
+                         Letters=letters, adjust="none", reversed = TRUE)) %>% 
+  dplyr::select(-SE, -df) %>% 
+  rename(Nozzle = nozzle, 
+         AUC = response, 
+         Group = .group) %>% 
+  mutate_if(is_double, ~round(.,1)) %>% 
+  unite("CI", c("lower.CL", "upper.CL"), sep = "-") 
+
+
+wis_cld_noz
+```
+
+```
+auc_wi <- wis_cld %>% 
+ggplot(aes(x=reorder(trt, response), 
+               y=response, color=trt, label = .group)) + 
+  geom_point(size = 2, stroke = 1) +
+  ylim(0,75) +
+ scale_color_brewer(palette = "Paired") +
+  theme_test() + 
+  geom_text(nudge_y = c(23, 20, 10, 10)) +
+  geom_text(aes(x = 3.5, y = 20,
+                label = "Lower values \nless spray particle \ndeposition \nfrom 1 to 60 m"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Area under the curve at downwind",
+       y= "", x="") +
+  annotate(geom = "table", x = 1.8, y = 20, color = "#282728",
+            label = list(wis_cld_noz), 
+            vjust = 1, hjust = 0) +
+  geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size=1.5) + 
+  coord_flip() +
+  theme(legend.position = "none",
+        axis.text = element_markdown(size = 8),
+        plot.title = element_markdown(family = "fredoka", size = 7, color = "#282728")) 
+  auc_wi 
+```
+
+```
+auc_wi_noz <- wis_cld_noz %>% 
+ggplot(aes(x=reorder(nozzle, response), 
+               y=response, color=nozzle, label = .group)) + 
+  geom_point(size = 2, stroke = 1) +
+#  ylim(0,100) +
+ scale_color_brewer(palette = "Paired") +
+  theme_test() + 
+  geom_text(aes(x = 3.5, y = 5,
+                label = "Nozzle"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "",
+       y= "", x="") +
+  geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size=1.5) + 
+  coord_flip() +
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka", color = "#282728"),
+        plot.background = element_rect(fill = "#F5F5F5", color = NA))
+auc_wi_noz
+```
+
+```{r}
+auc_data4 <- auc_data3 %>% 
+  mutate(
+    emmeans = pmap(
+      .l = list(
+        object = model, 
+        specs = "trt",
+        type= "response",
+#        cont="pairwise", 
+        adjust="none"
+      ),
+      .f = emmeans
+    )
+  )
+```
+
+
+```{r}
+# full data frame with all means and CIs 
+auc_data4 %>% 
+  mutate(emm2 = map(emmeans, data.frame)) %>% 
+  unnest(emm2)
+#You can filter and make a data frame for each population and dat
+
+cld_function <- function(emmeans) {
+  if(requireNamespace("multcomp")) {
+    multcomp::cld(emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
+}
+}
+```
+
+
+```{r}
+auc_data5 <- auc_data4 %>% 
+  mutate(cld = map(emmeans, cld_function))
+```
+
+
+```{r}
+# here is similar to emmeans but you have letters
+auc_data6 <- auc_data5 %>% 
+  unnest(cld) %>% 
+  mutate(label_at = upper.CL - response + 15)
+# You can also filter and make specific data frames
+```
+
+
+```{r}
+auc_wi <- auc_data6 %>% 
+  filter(location == "wisconsin") %>% 
+    mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>%
+ggplot(aes(x=reorder(trt, response), 
+               y=response, color=trt, label = .group)) + 
+  geom_point(size = 2, stroke = 1) +
+#  ylim(0,100) +
+ scale_color_brewer(palette = "Paired") +
+  geom_text(nudge_y = c(75, 70, 65, 42, 40, 30,  
+                        19.1, 17.5, 11.6, 7.1, 3, 2.5)) +
+  theme_test() + 
+  geom_text(aes(x = 4, y = 120,
+                label = "Lower values\nless spray \nparticle\n deposition\n from 1 to 60 m"),
+            stat = "unique", family = "flower",
+            size = 4, color = "darkcyan") +
+  labs(title = "Area under the curve at downwind",
+       y= "", x="") +
+  geom_linerange(aes(ymin = lower.CL, ymax = upper.CL), size=1.5) + 
+  coord_flip() +
+  theme(legend.position = "none",
+        axis.text = element_markdown(size = 8),
+        panel.background = element_rect(fill = "#F5F5F5", color = NA),
+        plot.title = element_markdown(family = "fredoka", size = 12, color = "#282728")) 
+auc_wi
+```
+
+
+
+## Weather 
+
+
+```{r, include=FALSE, waring=F}
+library(tidyverse)
+library(RColorBrewer)
+library(CircStats)
+library(openair)
+library(scales)
+```
+
+
+# Weather ----------------------------------------------------------------------
+
+## Read weather dataset
+
+```{r message=FALSE}
+data_path <- "./data/weather"   
+files <- dir(data_path, pattern = '*.xlsx') 
+
+weather_data <- files %>%
+  map(~ readxl::read_excel(file.path(data_path, .)))
+
+weather_mo <- weather_data[[1]] %>% 
+  janitor::row_to_names(row_number = 1) %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(-8:-13) %>% 
+  mutate(location = "missouri")
+  
+weather_ne <- weather_data[[2]] %>% 
+  janitor::row_to_names(row_number = 1) %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(-8:-13) %>% 
+  mutate(location = "nebraska")
+
+
+weather_wi <- weather_data[[3]] %>% 
+  janitor::row_to_names(row_number = 1) %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(-8:-13) %>% 
+  mutate(location = "wisconsin")
+```
+
+
+
+## Tidy weather dataset
+
+```{r message=FALSE}
+weather <- weather_mo %>% 
+  bind_rows(weather_ne) %>% 
+  bind_rows(weather_wi) %>% 
+  rename(wind_dir_min = wind_direction_min_2, 
+         wind_dir_max = wind_direction_max_2,
+         wind_dir_avg = wind_direction_average_2,
+         wind_sp_min = wind_speed_min_2,
+         wind_sp_max = wind_speed_max_2,
+         wind_sp_avg = wind_speed_average_2) %>% 
+  mutate(date = lubridate::mdy_hms(date)) %>% 
+  mutate_at(vars(pass:wind_sp_avg), funs(as.double),
+            vars(pass:wind_sp_avg), funs(round(.,5))) %>% 
+#  rename_at(vars(wind_direction_max_9:wind_speed_average_13), paste0, "_voltage") %>% 
+#  rename_at(vars(wind_direction_min_14:wind_direction_average_16), paste0, "_degress") %>% 
+#  rename_at(vars(wind_speed_min_17:wind_speed_average_19), paste0, "_mph") %>% 
+  filter(!is.na(pass))
+```
+
+
+```{r}
+data <- weather %>% 
+  mutate(wind_sp_min = wind_sp_min * 0.44704,
+         wind_sp_max = wind_sp_max * 0.44704,
+         wind_sp_avg = wind_sp_avg * 0.44704) %>% 
+  rename(dir = wind_dir_avg,
+         spd = wind_sp_avg)
+```
+
+```{r}
+data %>% 
+  summarise(max(spd))
+```
+
+
+```{r Preliminar figure}
+data <- data %>% 
+  filter(location == "wisconsin")
+
+plot.windrose <- function(data,
+                          spd,
+                          dir,
+                          spdres = 2,
+                          dirres = 22.5,
+                          spdmin = 0,
+                          spdmax = 8,
+                          spdseq = NULL,
+                          palette = "OrRd",
+                          countmax = NA,
+                          debug = 0){
+  # Look to see what data was passed in to the function
+  if (is.numeric(spd) & is.numeric(dir)){
+    # assume that we've been given vectors of the speed and direction vectors
+    data <- data.frame(spd = spd,
+                       dir = dir)
+    spd = "spd"
+    dir = "dir"
+  } else if (exists("data")){
+    # Assume that we've been given a data frame, and the name of the speed 
+    # and direction columns. This is the format we want for later use.    
+  }  
+  # Tidy up input data ----
+  n.in <- NROW(data)
+  dnu <- (is.na(data[[spd]]) | is.na(data[[dir]]))
+  data[[spd]][dnu] <- NA
+  data[[dir]][dnu] <- NA
+  # figure out the wind speed bins ----
+  if (missing(spdseq)){
+    spdseq <- seq(spdmin,spdmax,spdres)
+  } else {
+    if (debug >0){
+      cat("Using custom speed bins \n")
+    }
+  }
+  # get some information about the number of bins, etc.
+  n.spd.seq <- length(spdseq)
+  n.colors.in.range <- n.spd.seq - 1
+  # create the color map
+  spd.colors <- colorRampPalette(brewer.pal(min(max(3,
+                                                    n.colors.in.range),
+                                                min(9,
+                                                    n.colors.in.range)),                                               
+                                            palette))(n.colors.in.range)
+  if (max(data[[spd]],na.rm = TRUE) > spdmax){    
+    spd.breaks <- c(spdseq,
+                    max(data[[spd]],na.rm = TRUE))
+    spd.labels <- c(paste(c(spdseq[1:n.spd.seq-1]),
+                          '-',
+                          c(spdseq[2:n.spd.seq])),
+                    paste(spdmax,
+                          "-",
+                          max(data[[spd]],na.rm = TRUE)))
+    spd.colors <- c(spd.colors, "grey50")
+  } else{
+    spd.breaks <- spdseq
+    spd.labels <- paste(c(spdseq[1:n.spd.seq-1]),
+                        '-',
+                        c(spdseq[2:n.spd.seq]))    
+  }
+  data$spd.binned <- cut(x = data[[spd]],
+                         breaks = spd.breaks,
+                         labels = spd.labels,
+                         ordered_result = TRUE)
+  # figure out the wind direction bins
+  dir.breaks <- c(-dirres/2,
+                  seq(dirres/2, 360-dirres/2, by = dirres),
+                  360+dirres/2)  
+  dir.labels <- c(paste(360-dirres/2,"-",dirres/2),
+                  paste(seq(dirres/2, 360-3*dirres/2, by = dirres),
+                        "-",
+                        seq(3*dirres/2, 360-dirres/2, by = dirres)),
+                  paste(360-dirres/2,"-",dirres/2))
+  # assign each wind direction to a bin
+  dir.binned <- cut(data[[dir]],
+                    breaks = dir.breaks,
+                    ordered_result = TRUE)
+  levels(dir.binned) <- dir.labels
+  data$dir.binned <- dir.binned
+  # Run debug if required ----
+  if (debug>0){    
+    cat(dir.breaks,"\n")
+    cat(dir.labels,"\n")
+    cat(levels(dir.binned),"\n")
+  }
+
+
+# create the plot ----
+  p.windrose <- ggplot(data = data,
+                       aes(x = dir.binned,
+                           fill = spd.binned
+                           ,y = (..count..)/sum(..count..)
+                           ))+
+    geom_bar() + 
+    scale_x_discrete(drop = FALSE,
+labels = c("N","","NE","", "E", "", "SE","", 
+             "S","", "SW","", "W","","NW","")) +
+    coord_polar(start = -((dirres/2)/360) * 2*pi) +
+    scale_fill_manual(name = "Wind <br>speed <br>(m s<sup>-1</sup>)", 
+                      values = spd.colors,
+                      drop = FALSE) +
+    theme_bw() +
+    theme(axis.title.x = element_blank(), 
+          legend.position = "right",
+          legend.title = element_markdown(size = 9),
+          legend.key.size = unit(1,"line"),
+          legend.direction = "vertical",
+          plot.title = element_markdown(family = "fredoka", size = 12, color = "#282728")) +
+    scale_y_continuous(labels = percent_format(suffix = "", accuracy = 1)) + 
+    labs(y = "Frequency (%)", title = "Wind speed and direction") 
+  # adjust axes if required
+  if (!is.na(countmax)){
+    p.windrose <- p.windrose +
+      ylim(c(0,countmax))
+  }
+  # print the plot
+  print(p.windrose)  
+  # return the handle to the wind rose
+  return(p.windrose)
+}
+```
+
+
+
+```{r Figure}
+plot <- plot.windrose(data = data,
+              spd = "spd",
+              dir = "dir") 
+wi_speed <- plot +  #facet_wrap(~location) +  
+    ggsave("WindRose_WI.png", units="in")
+```
+
+
+
+## Figure ----------------------------------------------------------------
+
+
+
+```{r}
+background <- "white"
+text_colour <- "white"
+title <- "#1D1D1D"
+wisconsin <- "#C5050C"
+
+theme_style <- theme(legend.position = "bottom",
+                     plot.background = element_rect(fill = background, color = NA),
+                     legend.text = element_markdown(),
+                     plot.title = element_markdown(size = 18, margin = margin(3, 0, 3, 0),
+                                                          family = "fredoka"),
+                     plot.subtitle = element_markdown(size = 5, hjust = 0,
+                                                      family = "Roboto Condensed",
+                                                  color = title),
+                     plot.caption = element_markdown(size = 4, family = "lobster"))
+
+
+theme_set(theme_style)
+```
+
+
+https://cdn.freelogovectors.net/wp-content/uploads/2019/09/University-of-Wisconsin-Madison-Logo.png
+
+```{r}
+all_wi <- (wi_speed + ins_wi) / figs / (auc_wi | c) +
+   plot_layout(heights =  c(1, 2, 1)) +
+  plot_annotation(title = "<img src='https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Wisconsin_Badgers_logo.svg/250px-Wisconsin_Badgers_logo.svg.png' width='60'/>")
+
+ggsave("wisconsin.pdf", all_wi, width = 9, height = 12)
+```
+
