@@ -1,0 +1,878 @@
+---
+title: "Combined"
+author: "Maxwel Coura Oliveira"
+date: "5/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	fig.align = "center",
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE,
+	include = FALSE
+)
+```
+
+
+
+
+
+```{r message = FALSE}
+# Packages
+library(gt)
+library(RColorBrewer)
+library(CircStats)
+library(openair)
+library(scales)
+library(tidyverse)
+library(lme4)
+library(emmeans)
+library(ggpmisc)
+library(lmerTest)
+library(multcomp)
+library(cowplot)
+library(patchwork)
+library(multcomp)
+library(ggtext)
+library(ggeffects)
+options(scipen = 999)
+library(agricolae)
+library(extrafont)
+library(showtext)
+showtext_auto()
+font_add_google("Playfair Display", ## name of Google font
+                "Playfair")  ## name that will be used in R
+font_add_google("Bangers", "Bangers")
+font_add_google("Schoolbell", "bell")
+font_add_google("Fredoka One", "fredoka")
+font_add_google("Lobster", "lobster")
+font_add_google("Indie Flower" , "flower")
+font_add_google("Roboto Condensed", "roboto")
+```
+
+
+
+Here is presented ANOVA results (upwind, inswath, AUC) with 5% significance level, and figures from downwind deposition.
+
+
+```{r load-data}
+## Load deposition dataset
+#missouri
+path_mo <- "./data/deposition/Deposition data_MO.xlsx"
+
+missouri <- path_mo %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_mo", "upwind_mo", "inswath_mo")) %>% 
+  map(readxl::read_excel, path = path_mo)
+
+
+
+downwind_mo <- missouri$downwind_mo %>% 
+  mutate(type = "downwind")
+upwind_mo <- missouri$upwind_mo %>% 
+  mutate('distance (m)' = NA,
+         type = "upwind")
+inswath_mo <- missouri$inswath_mo %>%
+  mutate('distance (m)' = NA,
+         type = "inswath") %>% 
+  dplyr::select(-...8)
+
+missouri <- downwind_mo %>% 
+  bind_rows(upwind_mo) %>% 
+  bind_rows(inswath_mo) %>% 
+  mutate(location = "missouri")
+
+
+#nebraska
+path_ne <- "./data/deposition/Deposition data_NE.xlsx"
+
+nebraska <- path_ne %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_ne", "upwind_ne", "inswath_ne")) %>% 
+  map(readxl::read_excel, path = path_ne)
+
+
+
+downwind_ne <- nebraska$downwind_ne %>% 
+  mutate(type = "downwind")
+upwind_ne <- nebraska$upwind_ne %>% 
+  mutate('distance (m)' = NA,
+         type = "upwind")
+inswath_ne <- nebraska$inswath_ne %>%
+  mutate('distance (m)' = NA,
+         type = "inswath")
+
+nebraska <- downwind_ne %>% 
+  bind_rows(upwind_ne) %>% 
+  bind_rows(inswath_ne) %>% 
+  mutate(location = "nebraska")
+
+
+#wisconsin
+path_wi <- "./data/deposition/Deposition data_WI.xlsx"
+
+wisconsin <- path_wi %>% 
+  readxl::excel_sheets() %>% 
+  set_names(c("downwind_wi", "upwind_wi", "inswath_wi")) %>% 
+  map(readxl::read_excel, path = path_wi)
+
+
+
+downwind_wi <- wisconsin$downwind_wi %>% 
+  mutate(type = "downwind")
+upwind_wi <- wisconsin$upwind_wi %>% 
+  mutate('distance (m)' = NA,
+         type = "upwind")
+inswath_wi <- wisconsin$inswath_wi %>%
+  mutate('distance (m)' = NA,
+         type = "inswath")
+
+wisconsin <- downwind_wi %>% 
+  bind_rows(upwind_wi) %>% 
+  bind_rows(inswath_wi) %>% 
+  mutate(location = "wisconsin")
+```
+
+
+```{r join-data}
+### Join location datasets
+new_dt <- missouri %>% 
+  bind_rows(nebraska) %>% 
+  bind_rows(wisconsin) %>% 
+  janitor::clean_names() %>% 
+  rename(deposition = n_l_cm2) %>% 
+  mutate_if(is_character, as_factor) %>% 
+  mutate(block = as_factor(block)) %>% 
+  mutate(distance_m = replace_na(distance_m, 0)) %>% 
+  mutate(distance_log = log10(distance_m),
+         deposition_log = log10(deposition)) 
+```
+
+
+## Deposition inswath 
+
+
+
+```{r}
+### Filter deposition dataset inswath
+inswath <-  new_dt %>% 
+  filter(type == "inswath")
+```
+
+
+```{r}
+### Test ANOVA assumptions
+#### Normal distribution
+inswath %>% 
+  ggplot(aes(x = deposition)) +
+  geom_histogram()
+# data has normal distribution
+```
+
+
+
+```{r}
+#### Homogeneity of variances
+bartlett.test(deposition ~ location, data = inswath)
+# can't compare locations
+```
+
+
+
+
+```{r}
+### Data analysis
+#### Model
+model1 <- lmer(deposition ~  solution * sprayer * nozzle +
+                (1|block/location), 
+              REML = FALSE, data = inswath)
+```
+
+
+
+```{r}
+#### Checking normality
+par(mfrow = c(1,2))  # This code put two plots in the same window
+#hist(model$residuals)   # Makes histogram of residuals  
+plot(model1, which = 2)   # Makes Q-Q plot
+```
+
+
+
+
+
+```{r}
+#### Fit models and ANOVA
+anova(model1)
+```
+
+
+
+### Solution x sprayer 
+
+```{r}
+#### Solution x sprayer 
+lsmeans1 <- emmeans(model1, ~ solution * sprayer, cont="pairwise", 
+                      adjust="none", alpha=0.05)
+
+cld1 <- cld(lsmeans1$emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
+cld1
+```
+```{r echo=FALSE, include=TRUE}
+cld1 %>% 
+  tibble() %>% 
+  rename(deposition = emmean) %>% 
+  mutate_if(is.double, ~ round(., 1)) %>% 
+  dplyr::select(-df) %>% 
+  gt() %>% 
+  tab_header(
+    title = md("Spray solution deposition inswath"),
+    subtitle = "Data is combined across Nebraska, Missouri and Wisconsin"
+  ) %>%
+  tab_source_note(md("Solution x sprayer averaged across nozzle"))
+```
+
+
+### Solution x nozzle
+
+```{r}
+#### Solution x sprayer 
+lsmeans2 <- emmeans(model1, ~ solution * nozzle, cont="pairwise", 
+                      adjust="none", alpha=0.05)
+
+cld2 <- cld(lsmeans2$emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
+cld2
+```
+
+```{r echo=FALSE, include=TRUE}
+cld2 %>% 
+  tibble() %>% 
+  rename(deposition = emmean) %>% 
+  mutate_if(is.double, ~ round(., 1)) %>% 
+  dplyr::select(-df) %>% 
+  gt() %>% 
+  tab_header(
+    title = md("Spray solution deposition inswath"),
+    subtitle = "Data is combined across Nebraska, Missouri and Wisconsin"
+  ) %>%
+  tab_source_note(md("Solution x nozzle averaged across srayer"))
+```
+
+
+
+
+## Deposition upwind 
+
+
+
+```{r}
+### Filter deposition dataset upwind
+upwind <- new_dt %>% 
+  filter(type == "upwind")
+```
+
+
+
+```{r}
+### Test ANOVA assumptions
+#### Normal distribution
+upwind %>% 
+  ggplot(aes(x = deposition)) +
+  geom_histogram() 
+# not normalized
+```
+
+
+
+```{r}
+##### Log scale
+upwind %>% 
+  ggplot(aes(x = log(deposition))) +
+  geom_histogram()
+# yes!
+```
+
+
+
+```{r}
+#### Homogeneity of variances
+bartlett.test(deposition ~ location, data = upwind)
+# can't compare locations
+```
+
+
+
+
+```{r}
+#### Model
+model2 <- lmer(log(deposition) ~ solution * sprayer * nozzle + (1|block/location), 
+              REML = FALSE, data = upwind)
+```
+
+
+```{r}
+# Checking normality
+par(mfrow = c(1,2))  # This code put two plots in the same window
+#hist(frogs_anova$residuals)   # Makes histogram of residuals  
+plot(model2, which = 2)   # Makes Q-Q plot
+```
+
+
+
+
+
+```{r}
+#### ANOVA 
+anova(model2) 
+```
+
+
+
+```{r}
+#### Solution
+lsmeans3 <- emmeans(model2, ~ solution, cont="pairwise", type = "response",
+                      adjust="none", alpha=0.05)
+
+cld3 <- cld(lsmeans3$emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
+cld3
+```
+
+### Solution
+
+```{r echo=FALSE, include=TRUE}
+cld3 %>% 
+  tibble() %>% 
+  rename(deposition = response) %>% 
+  mutate_if(is.double, ~ round(., 2)) %>% 
+  dplyr::select(-df) %>% 
+  gt() %>% 
+  tab_header(
+    title = md("Spray solution deposition upwind"),
+    subtitle = "Data is combined across Nebraska, Missouri and Wisconsin"
+  ) %>%
+  tab_source_note(md("Solution is averaged across sprayer and nozzle"))
+```
+
+
+
+# Deposition downwind 
+
+
+
+
+
+```{r}
+## Filter data
+data_dw <- new_dt %>% 
+  filter(type == "downwind") %>% 
+  mutate(pass = factor(pass)) %>% 
+  group_by(location, pass, block) 
+```
+
+
+
+
+
+```{r}
+## Visualize
+data_dw %>% 
+  ggplot(aes(x = distance_m, y = deposition, color = nozzle)) +
+  geom_point() +
+  facet_grid(~ location)
+# some trt have rapid decrease and some trt have linear trend
+```
+
+
+
+
+
+```{r}
+## Visualize (log scale)
+data_dw %>% 
+#  unite("trt", c("solution", "sprayer", "nozzle")) %>% 
+  ggplot(aes(x = log(distance_m), y = log(deposition), color = nozzle)) +
+  geom_point() +
+  facet_grid(sprayer ~ solution) +
+  geom_smooth(method = "lm") 
+# better go with log scale
+```
+
+
+
+```{r}
+## Normal distribution
+data_dw %>% 
+  ggplot(aes(x = log(deposition))) +
+  geom_histogram()
+```
+
+
+```{r}
+# Linear Model
+## Arrange dataset
+data_dw1 <- data_dw %>% 
+  group_by(solution, sprayer, nozzle) %>% 
+  nest()
+
+data_dw1
+```
+
+
+
+```{r}
+### Model function
+model3 <- function(df){
+  lmer(log(deposition) ~ log(distance_m) + 
+         (1|block/location), REML = TRUE, data = df)
+}
+```
+
+
+
+```{r warning=FALSE, message = FALSE}
+### Fit model and confidence intervals
+data_dw2 <- data_dw1 %>% 
+  mutate(model = map(data, model3),
+         summary = map(model, broom.mixed::tidy),
+         confint = map(model, confint))
+```
+
+
+
+
+```{r}
+### Get parameters from models
+params <- data_dw2 %>% 
+  unnest(summary) %>% 
+  filter(effect == "fixed") %>% 
+  mutate(estimate_exp = exp(estimate),
+         estimate_exp = case_when(
+           term == "log(distance_m)" ~ -estimate_exp,
+           TRUE                      ~ estimate_exp
+         )) %>% 
+  dplyr::select(solution, sprayer, nozzle, term, estimate, std.error, statistic, p.value, estimate_exp) %>% 
+  mutate(p.value = round(p.value, 3)) %>% 
+  mutate(term = fct_recode(term,
+                           slope = "log(distance_m)"),
+         term = fct_recode(term,
+                           Intercept = "(Intercept)")) %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ", remove = FALSE)
+
+params
+```
+
+
+
+
+
+
+```{r}
+### Get confidence intervals
+get_cis <- function(number){
+  exp(data_dw2$confint[[number]]) %>%
+    as_tibble() %>%
+    slice_tail(n=2)
+} 
+
+number <- as_tibble(c(1:12))
+
+intervals <- number %>%
+  mutate(interval = map(value, get_cis)) %>%
+  unnest(interval)
+
+# join to main dataset
+downwind_final <- params %>%
+  bind_cols(intervals) %>%
+  rename(lower = `2.5 %`,
+         upper = `97.5 %`) %>%
+  mutate(lower = case_when(
+           term == "log(distance_m)" ~ -lower,
+         TRUE                        ~ lower
+         ),
+         upper = case_when(
+           term == "log(distance_m)" ~ -upper,
+         TRUE                        ~ upper,
+         )) %>% 
+  mutate(across(where(is_double), round, 3))
+```
+
+
+
+
+```{r}
+## Distance of deposition at 0
+distance_final <- downwind_final %>% 
+  dplyr::select(trt, term, estimate_exp) %>% 
+  pivot_wider(
+              names_from = term, 
+              values_from = estimate_exp) 
+```
+
+
+```{r}
+distance_function <- function(int, slope, y = 0) {
+  distance = (y - int) / slope
+  return(distance)
+}
+
+distance_final1 <- distance_final %>% 
+  mutate(distance_m = map2_dbl(Intercept, slope, distance_function),
+         distance_m = round(distance_m, 10)) %>% 
+  mutate( y = Intercept + slope * distance_m)
+```
+
+
+
+
+
+```{r}
+## Predict
+downwind_final1 <- downwind_final %>% 
+  pivot_wider(id_cols = trt:nozzle,
+              names_from = term, 
+              values_from = estimate_exp) 
+```
+
+
+```{r}
+linear <- function(a, b, d) {
+  y = a + b*d
+  return(y)
+}
+
+linear(distance_final1$Intercept, distance_final1$slope, distance_final1$distance_m)
+```
+
+### Intercept
+
+```{r include=TRUE}
+a <- downwind_final %>% 
+  filter(term == "Intercept") %>% 
+    mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = reorder(trt, estimate_exp), y = estimate_exp, color = trt)) +
+  geom_point(size = 2, stroke = 1) +
+  scale_color_brewer(palette = "Paired") +
+  geom_linerange(aes(ymin = lower, ymax = upper), size = 1.5) +
+  coord_flip() +
+  geom_text(aes(x = 1.5, y = 15,
+                label = "Lower values lower spray \nparticle deposition"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Intercept at downwind", 
+       y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")")), x = "") +
+  theme_test() +
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
+a
+```
+
+### Slope
+
+```{r include=TRUE}
+b <- downwind_final %>% 
+  filter(term == "slope") %>% 
+  mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = reorder(trt, estimate_exp), y = estimate_exp, color = trt)) +
+  geom_point(size = 2, stroke = 1) +
+  scale_color_brewer(palette = "Paired") +
+  geom_linerange(aes(ymin = -lower, ymax = -upper), size = 1.5) +
+  coord_flip() +
+  geom_text(aes(x = 11.6, y = -0.43,
+                label = "Higher values lower spray \nparticle deposition rate"),
+            stat = "unique", family = "bell",
+            size = 4, color = "darkcyan") +
+  labs(title = "Slope at downwind", 
+       y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")")), x = "") +
+  theme_test() +
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka", color = "#282728")) 
+b
+```
+
+### Predicted downwind distance
+
+```{r include=TRUE}
+c <- distance_final1 %>% 
+    mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Water Hood TTI",
+    "Intact Hood AIXR", "Water Hood AIXR", "Water Hood ULD",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = reorder(trt, distance_m), 
+             y = distance_m,
+             label = distance_m, fill = trt)) +
+  geom_bar(stat = "identity", width = 0.8) +
+  coord_flip() +
+  geom_label(aes(label = round(distance_m, 0)), size = 3) +
+  scale_fill_brewer(palette = "Paired") +
+  labs(title = "Predicted downwind distance (m)", 
+       y = "", x = "") +
+#  geom_label(aes(label = distance_0)) +
+  ylim(0,60) +
+  theme_test() +
+  theme(legend.position = "none",
+        plot.title = element_markdown(family = "fredoka", size = 12, color = "#282728"),
+        panel.background = element_rect(fill = "#F5F5F5", color = NA),
+        axis.text.x = element_blank(),
+        axis.text = element_markdown(size = 8),
+        axis.ticks.x = element_blank()) +
+   geom_text(x = 4, y = 35,
+                label = "Distance where \nno spray \nparticle \ndeposition \nwas detected",
+            stat = "unique", family = "flower",
+            size = 4, color = "darkcyan") 
+c
+```
+
+
+```{r}
+fig <- data_dw2 %>% 
+  dplyr::select(solution, sprayer, nozzle, model)
+```
+
+
+```{r warning=FALSE, message = FALSE}
+fig_model <- function(model){
+  ggpredict(model, terms = "distance_m", back.transform = TRUE) %>% 
+    as_tibble()
+}
+
+fig1 <- fig %>% 
+  mutate(estimates = map(model, fig_model)) %>% 
+  unnest(estimates) %>% 
+  rename(distance_m = x) %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ") %>% 
+  mutate_if(is_character, as_factor) 
+```
+
+```{r}
+label <- distance_final %>% 
+  mutate(Intercept = round(Intercept, 1),
+         slope = round(slope, 2)) %>% 
+  mutate(y = "y = ",
+         x = "x") %>% 
+  unite("formula", c("y", "Intercept", "slope"), sep = " ") %>% 
+  unite("formula", c("formula", "x"), sep = "")
+```
+
+
+```{r}
+fig2 <- fig1 %>% 
+  left_join(label)
+```
+ 
+### Back-transformed linear models
+
+```{r include=TRUE}
+figs <- fig2 %>% 
+  mutate(trt = factor(trt, levels = c(
+    "Intact Hood TTI", "Intact Hood ULD", "Intact Hood AIXR",
+    "Water Hood TTI",  "Water Hood ULD", "Water Hood AIXR",
+    "Intact Open TTI", "Water Open TTI", "Intact Open ULD",
+    "Water Open ULD", "Water Open AIXR", "Intact Open AIXR"
+  ))) %>% 
+  ggplot(aes(x = distance_m, y = predicted, color = trt, 
+             fill = trt, label = formula)) +
+  scale_color_brewer(palette = "Paired") +
+  scale_fill_brewer(palette = "Paired") +
+  geom_line(fill = NA) +
+  geom_point(alpha = 0.5) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), 
+              alpha = 0.3, color = NA) +
+#  geom_segment(aes(x = 33.5, y = 0, xend = 33.5, yend = 15)) +
+  facet_wrap(~ trt, ncol = 4) +
+  theme_test() +
+#  background_grid() +
+  theme(legend.position = "none") +
+  geom_label(aes(label = formula), x = 30, y = 20, color = 1) +
+  labs(title = "Back-transformed linear models prediction of spray particle deposition",
+    x = "Distance (m)", 
+       y = expression(paste("Spray particle deposition (\u03b7L/cm"^"2",")"))) +
+  theme(legend.position = "none",
+        strip.background = element_blank(),
+        panel.background = element_rect(fill = "#F5F5F5", color = NA),
+        plot.title = element_markdown(family = "fredoka", size = 12, color = "#282728"),
+        strip.text = element_textbox(
+          size = 12,
+          color = "white", 
+          fill = "#494949", 
+          box.color = "#282728",
+          halign = 0.5, linetype = 1, r = unit(5, "pt"), width = unit(1, "npc"),
+          padding = margin(2, 0, 1, 0), 
+          margin = margin(3, 3, 3, 3))) +
+  ggsave("linear_combined.png")
+figs
+```
+
+
+
+
+
+### AUC 
+
+
+```{r}
+(id_df <- data_dw %>% 
+  distinct(pass, block, location) %>% 
+  ungroup() %>% 
+  mutate(id = as_factor(dplyr::row_number()))
+)
+```
+
+```{r}
+id_df1 <- data_dw %>% 
+  left_join(id_df) 
+```
+
+
+```{r}
+auc_cal <- function(number){
+  df <- id_df1 %>% 
+    filter(id == number)  
+  
+  audps(df$deposition, df$distance_m, type="absolute") 
+}
+
+auc_data <- id_df1 %>% 
+  group_by(id) %>% 
+  nest() %>% 
+  mutate(auc = map_dbl(id, auc_cal)) %>% 
+  ungroup(id) %>% 
+  unnest() 
+```
+
+```{r}
+auc_data1 <- auc_data %>% 
+  filter(distance_m == 1)
+```
+
+```{r}
+auc_data1 %>% 
+  ggplot(aes(x = log(auc))) + 
+  geom_histogram()
+```
+
+
+```{r}
+auc_data2 <- auc_data1 %>% 
+  unite("trt", c("solution", "sprayer", "nozzle"), sep = " ", remove = FALSE)
+```
+
+
+```{r}
+auc_model <- lmer(log(auc) ~ solution * sprayer * nozzle + (1|block/location), data=auc_data2)
+```
+
+
+```{r}
+# Checking normality
+par(mfrow = c(1,2))  # This code put two plots in the same window
+#hist(auc_model$residuals)   # Makes histogram of residuals  
+plot(auc_model, which = 2)   # Makes Q-Q plot
+```
+
+
+
+
+
+
+```{r}
+anova(auc_model)
+```
+
+
+### Solution x sprayer 
+
+```{r}
+lsmeans4 <- emmeans(auc_model, ~  solution * sprayer, cont="pairwise", type = "response",
+                      adjust="none", alpha=0.05)
+
+cld4 <- cld(lsmeans4$emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE,
+            type = "response")
+cld4
+```
+
+```{r, include=TRUE}
+cld4 %>% 
+  tibble() %>% 
+  rename(deposition = response) %>% 
+  mutate_if(is.double, ~ round(., 1)) %>% 
+  dplyr::select(-df) %>% 
+  gt() %>% 
+  tab_header(
+    title = md("AUC for spray solution deposition downwind"),
+    subtitle = "Data is combined across Nebraska, Missouri and Wisconsin"
+  ) %>%
+  tab_source_note(md("Solution x sprayer averaged across nozzle"))
+```
+
+
+
+### Nozzle x sprayer
+
+```{r}
+lsmeans5 <- emmeans(auc_model, ~  nozzle * sprayer, cont="pairwise", 
+                      adjust="none", alpha=0.05, type = "response")
+
+cld5 <- cld(lsmeans5$emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
+cld5
+```
+
+```{r, include=TRUE}
+cld5 %>% 
+  tibble() %>% 
+  rename(deposition = response) %>% 
+  mutate_if(is.double, ~ round(., 1)) %>% 
+  dplyr::select(-df) %>% 
+  gt() %>% 
+  tab_header(
+    title = md("AUC for spray solution deposition downwind"),
+    subtitle = "Data is combined across Nebraska, Missouri and Wisconsin"
+  ) %>%
+  tab_source_note(md("Nozzle x sprayer averaged across solution"))
+```
+
+###  Solution x nozzle
+
+```{r}
+lsmeans6 <- emmeans(auc_model, ~  nozzle * solution, cont="pairwise", 
+                      adjust="none", alpha=0.05, type = "response")
+
+cld6 <- cld(lsmeans6$emmeans, alpha=0.05, Letters=letters, adjust="none", reversed = TRUE)
+cld6
+```
+
+```{r, include=TRUE}
+cld6 %>% 
+  tibble() %>% 
+  rename(deposition = response) %>% 
+  mutate_if(is.double, ~ round(., 1)) %>% 
+  dplyr::select(-df) %>% 
+  gt() %>% 
+  tab_header(
+    title = md("AUC for spray solution deposition downwind"),
+    subtitle = "Data is combined across Nebraska, Missouri and Wisconsin"
+  ) %>%
+  tab_source_note(md("Solution x nozzle averaged across sprayer"))
+```
+
+
+```{r}
+library(webshot)
+# R Markdown file
+input_file <- system.file("combined.Rmd", package = "knitr")
+rmdshot(input_file, "minimal_rmd.png")
+```
+
