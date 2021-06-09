@@ -1087,6 +1087,7 @@ data <- weather %>%
          wind_sp_avg = wind_sp_avg * 0.44704) %>% 
   rename(dir = wind_dir_avg,
          spd = wind_sp_avg)
+write_csv(file = data, file = "wind.csv")
 ```
 
 
